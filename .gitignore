@@ -1,0 +1,15 @@
+# Game bundles & local reverse engineering references
+main.js
+
+# Version archives
+versions/
+
+# Operating System files
+.DS_Store
+Thumbs.db
+*拷貝*
+*copy*
+
+# Node / Scratch files
+*.log
+scratch/
