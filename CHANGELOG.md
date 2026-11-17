@@ -5,7 +5,7 @@
 <div align="center">
 
 [![Buy Me a Coffee](https://img.shields.io/badge/Ko--fi-請兔子喝杯咖啡-ff5e5b?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/martianrabbit)
-[![Version](https://img.shields.io/badge/Version-2.0.0-blue.svg?style=for-the-badge)](https://github.com/hijacker4163/ro-survivors-helper)
+[![Version](https://img.shields.io/badge/Version-2.0.1-blue.svg?style=for-the-badge)](https://github.com/hijacker4163/ro-survivors-helper)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 
 **🐰 位於南半球從火星下來的兔子程式員 (Martian Rabbit) 精心打造 🚀**  
@@ -13,6 +13,31 @@
 👉 **[點此贊助請喝咖啡 (Ko-fi)](https://ko-fi.com/martianrabbit)**
 
 </div>
+
+---
+
+## 🚀 v2.0.1 (2026-11-17) - 背景持續運行模式、特權/紀錄引擎重大修復與介面視覺風格統一
+
+### 🌟 核心更新與優化
+- **🎨 懸浮面板設定選項視覺風格徹底統一 (Unified Glass Card UI)**：
+  - **消除雜亂背景色塊**：全面移除先前部分選項（燈籠、大廳、背景運行、組隊、分寶）雜亂不一的霓虹背景色與部分選項全無背景的斷層現象。
+  - **一體化深藍半透明卡片容器**：所有開關與設定行全面統一採用精緻深色毛玻璃卡片（`.ro-h-row` / `.ro-h-row-group`），具備一致的微光邊框、圓角與平滑 Hover 亮光效果。
+  - **圖標與標籤字體規格化**：所有開關皆配賦直觀 Emoji 與一致字級色階（`.ro-h-label`），支援繁中與英語即時切換。
+  - **分組階層自然收合**：組隊重組與分寶策略等包含子選項的項目採用統一卡片群組，子項目以細緻虛線分隔，視覺整潔清晰。
+- **🔄 全新背景持續運行模式 (Background Mode v0.4 / 視窗縮小與切頁不暫停)**：
+  - **核心技術突破**：透過深層偽造 `Document.prototype.hidden`、`visibilityState` 與 `hasFocus`，並於 Capture 階段攔截 `visibilitychange`、`pagehide`、`freeze`、`blur` 事件。
+  - **Web Worker 驅動 60 FPS rAF 引擎**：前景時由原生 `requestAnimationFrame` 運作（0 干涉、0 額外耗能）；當視窗縮小或切換至其他分頁時，自動由背景 Worker 接管 frame 回調佇列，持續以 16ms (~60 FPS) 推進遊戲 PixiJS 迴圈與自動戰鬥！
+  - **獨立開關控制**：於懸浮面板「自動解除暫停」下方新增「🔄 允許縮小與切頁 (背景運行)」開關，預設開啟。
+- **🛠️ 特權執行 (Focus/Banish) 與歷史紀錄中斷根本修復**：
+  - **根本原因排除**：先前重構卡片評分時，關卡道具識別函式（`isItemCard`、`getItemIdentity`、`isItemFocusTarget`、`isItemBanishTarget`）於檔案中未正確注入，導致選卡執行時於前置判定拋出 `ReferenceError`，直接落入例外救援區塊，進而跳過了專注、放逐點擊與歷史紀錄寫入。
+  - **完整補全道具與卡片精準識別**：加入全方位防偽卡片識別，嚴格區隔升級技能卡（Habilidades）與寶箱道具卡（Objetos）。
+  - **專注成形放逐解鎖**：支援專注流派成形判定（`isFocusBuildFormed`）自動解鎖放逐功能。
+  - **看門狗防搶選重置**：特權動作（Focus/Banish）執行時同步刷新看門狗逾時計時器，確保連鎖特權操作期間不被 2.8 秒看門狗強制介入。
+  - **紀錄即時同步**：選卡完成自動寫入 `pickHistory`，並於紀錄彈窗開啟時即時調用 `renderHistoryModalContent()` 刷新視圖。
+- **💄 按鈕樣式優化與白邊修復 (UI Style Isolation)**：
+  - 移除「🔄 刷新好友」與「新增」按鈕繼承之原生 `.ro-btn` 類別，徹底消除 `inset 0 1px #fff` 所產生的白色內陰影白邊與外邊距錯位問題。
+- **🧹 多國語系字典徹底整理 (i18n Cleanup)**：
+  - 清理繁體中文與英文字典中隨舊版介面移除之 12 項廢棄鍵值，代碼更為精簡健康。
 
 ---
 
