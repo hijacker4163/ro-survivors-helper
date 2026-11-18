@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Survivors 遊戲自動輔助助手 (RO Survivors Helper)
 // @namespace    https://github.com/hijacker4163/ro-survivors-helper
-// @version      2.0.3
+// @version      2.0.4-1
 // @description  RO Survivors 全面支援關卡內51種道具/神祇專注與放逐配置彈窗(In-Run Items Strategy)、活動副本大廳NPC原生A*避障點擊尋路優化、場次結束自動退隊重組(Auto Re-Party)、隊長好友清單勾選自動邀請、隊員自動同意入隊出發與跟隨分流、大廳5秒同步安全期、隊長端隊友同頻道廣場就緒嚴格檢查、懸浮Toast提示、單人誤搶進防護、徹底杜絕放逐技能(盜賊影步等)被選、非三導管專注技能集齊前優先重抽防佔槽、未完成進度智慧處理、組隊結算自動分寶擲骰(傳奇Need/其餘Greed)、法師三導管必備策略、選卡歷史詳細說明、特權動畫解鎖防禦、選卡逾時看門狗自救保底
 // @author       Martian Rabbit
 // @homepage     https://github.com/hijacker4163/ro-survivors-helper
@@ -14,7 +14,7 @@
 (function () {
   'use strict';
 
-  const SCRIPT_VERSION = '2.0.3';
+  const SCRIPT_VERSION = '2.0.4-1';
 
   let activeBattleGameInstance = null;
 
@@ -1008,7 +1008,7 @@
       mode_orbital: '🌀 圓周風箏 (繞圈拉打，兼顧拾寶)',
       mode_stationary_defense: '🛡️ 定點防守 (原地蓄力，僅吃肉救命)',
       kiting_radius: '風箏半徑：',
-      kiting_radius_tip: '圓周風箏拉打時圍繞戰鬥中心點的巡航半徑 (100px ~ 300px)',
+      kiting_radius_tip: '圓周風箏拉打時圍繞戰鬥中心點的巡航半徑 (100px ~ 1000px，預設 800px)',
       // 技能彈窗
       skills_modal_title: '🎯 職業技能專注與放逐配置',
       skills_affix_pref: '✨ 技能升級詞綴偏好優先順位 (點擊切換/選取):',
@@ -1113,7 +1113,7 @@
       mode_orbital: '🌀 Orbital Kiting (Circle kite & collect)',
       mode_stationary_defense: '🛡️ Stationary Defense (Stand still, eat meat)',
       kiting_radius: 'Kiting Radius:',
-      kiting_radius_tip: 'Radius in pixels for orbital circle strafing (100px ~ 300px)',
+      kiting_radius_tip: 'Radius in pixels for orbital circle strafing (100px ~ 1000px, default 800px)',
       // Skills Modal
       skills_modal_title: '🎯 Class Skills Focus & Banish Settings',
       skills_affix_pref: '✨ Skill Upgrade Affix Preferences (Click to toggle):',
@@ -1363,7 +1363,7 @@
     neverReplaceDeity: true,  // 🚫 不要替換神祇 (已有神祇時不再更換，防止原有神祇如貪婪之神被覆蓋)
     autoMovement: true,       // 🏃 戰鬥自動走位 (預設開啟，智慧拾取寶箱、磁鐵、卡片、裝備、肉塊與經驗)
     movementMode: 'smart_loot', // 走位模式: 'smart_loot' (智慧拾荒撿寶), 'orbital' (圓周風箏拉打), 'stationary_defense' (定點防守求生)
-    kitingRadius: 180,        // 🌀 風箏走位半徑 (像素，推薦 140~240)
+    kitingRadius: 800,        // 🌀 風箏走位半徑 (像素，推薦 400~800)
     preferredAffixes: ['targets', 'cooldown', 'damage'], // ✨ 技能升級詞綴偏好優先名單 (+目標, 冷卻縮減, 傷害提升 等)
     autoPickCard: true,       // 自動升級選卡
     autoResume: true,         // 自動解除暫停 (切分頁/ESC 自動繼續)
@@ -1467,7 +1467,11 @@
         if (!['smart_loot', 'orbital', 'stationary_defense'].includes(merged.movementMode)) {
           merged.movementMode = 'smart_loot';
         }
-        merged.kitingRadius = Math.max(100, Math.min(300, parseInt(merged.kitingRadius, 10) || 180));
+        if (!merged.kitingRadius || merged.kitingRadius === 180) {
+          merged.kitingRadius = 800;
+        } else {
+          merged.kitingRadius = Math.max(100, Math.min(1200, parseInt(merged.kitingRadius, 10) || 800));
+        }
         if (typeof merged.autoReParty !== 'boolean') {
           merged.autoReParty = false;
         }
@@ -5615,18 +5619,27 @@
 
     if (mode === 'orbital') {
       // 🌀 圓周風箏走位 (Orbital Kiting)
-      const radius = config.kitingRadius || 180;
+      const radius = config.kitingRadius || 800;
       orbitalAngle += orbitalAngularSpeed * 0.32;
       let targetX = combatAnchor.x + radius * Math.cos(orbitalAngle);
       let targetY = combatAnchor.y + radius * Math.sin(orbitalAngle);
 
-      // 防撞牆檢測：若前方不是可行走區域，立即反轉角速度
+      // 防撞牆檢測：若前方不是可行走區域，先嘗試反向旋轉；若地形偏狹窄則自動貼合最近可行走網格
       if (game.walk && typeof game.walk.walkable === 'function') {
         if (!game.walk.walkable(targetX, targetY)) {
-          orbitalAngularSpeed = -orbitalAngularSpeed;
-          orbitalAngle += orbitalAngularSpeed * 0.64;
-          targetX = combatAnchor.x + radius * Math.cos(orbitalAngle);
-          targetY = combatAnchor.y + radius * Math.sin(orbitalAngle);
+          const testReverseAngle = orbitalAngle - orbitalAngularSpeed * 0.64;
+          const revX = combatAnchor.x + radius * Math.cos(testReverseAngle);
+          const revY = combatAnchor.y + radius * Math.sin(testReverseAngle);
+          if (game.walk.walkable(revX, revY)) {
+            orbitalAngularSpeed = -orbitalAngularSpeed;
+            orbitalAngle = testReverseAngle;
+            targetX = revX;
+            targetY = revY;
+          } else if (typeof game.walk.nearestWalkable === 'function') {
+            const [nx, ny] = game.walk.nearestWalkable(targetX, targetY);
+            targetX = nx;
+            targetY = ny;
+          }
         }
       }
 
@@ -8365,8 +8378,8 @@
             <div id="ro-h-kiting-radius-row" style="display: ${config.movementMode === 'orbital' ? 'flex' : 'none'}; align-items: center; justify-content: space-between;">
               <span style="color: #94a3b8;" title="${t('kiting_radius_tip')}">${t('kiting_radius')}</span>
               <div style="display: flex; align-items: center; gap: 4px;">
-                <input type="range" id="ro-h-kiting-radius" min="100" max="300" step="10" value="${config.kitingRadius || 180}" style="width: 85px; cursor: pointer;">
-                <span id="ro-h-kiting-radius-val" style="color: #38bdf8; font-weight: 600; width: 38px; text-align: right;">${config.kitingRadius || 180}px</span>
+                <input type="range" id="ro-h-kiting-radius" min="100" max="1000" step="20" value="${config.kitingRadius || 800}" style="width: 85px; cursor: pointer;">
+                <span id="ro-h-kiting-radius-val" style="color: #38bdf8; font-weight: 600; width: 48px; text-align: right;">${config.kitingRadius || 800}px</span>
               </div>
             </div>
           </div>
@@ -8777,11 +8790,11 @@
 
     if (kitingRadiusRange) {
       kitingRadiusRange.oninput = () => {
-        const val = parseInt(kitingRadiusRange.value, 10) || 180;
+        const val = parseInt(kitingRadiusRange.value, 10) || 800;
         if (kitingRadiusVal) kitingRadiusVal.textContent = val + 'px';
       };
       kitingRadiusRange.onchange = () => {
-        const val = parseInt(kitingRadiusRange.value, 10) || 180;
+        const val = parseInt(kitingRadiusRange.value, 10) || 800;
         config.kitingRadius = val;
         if (kitingRadiusVal) kitingRadiusVal.textContent = val + 'px';
         saveConfig();

@@ -5,7 +5,7 @@
 <div align="center">
 
 [![Buy Me a Coffee](https://img.shields.io/badge/Ko--fi-請兔子喝杯咖啡-ff5e5b?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/martianrabbit)
-[![Version](https://img.shields.io/badge/Version-2.0.3-blue.svg?style=for-the-badge)](https://github.com/hijacker4163/ro-survivors-helper)
+[![Version](https://img.shields.io/badge/Version-2.0.4--1-blue.svg?style=for-the-badge)](https://github.com/hijacker4163/ro-survivors-helper)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 
 **🐰 位於南半球從火星下來的兔子程式員 (Martian Rabbit) 精心打造 🚀**  
@@ -15,6 +15,18 @@
 </div>
 
 ---
+
+## 🚀 v2.0.4-1 (2026-11-18) - 圓周風箏走位半徑擴增至 800px、UI 調整範圍放寬 (100~1000px) 與狹窄地形自動避障優化
+
+### 🌟 核心更新與優化
+- **🌀 風箏半徑預設提升至 800px (Default 800px Kiting Radius)**：
+  - 將圓周風箏走位（Orbital Kiting）的預設巡航半徑由 180px 提升至 **800px**，大幅拉開與中心怪群之安全距離，完美發揮遠程拉打與大範圍風箏牽引優勢。
+  - 舊設定平滑遷移：原有預設值 180px 自動升級至 800px，既有自訂設定則保留並限制於安全區間內。
+- **🎛️ 面板風箏半徑調整範圍擴大 (100px ~ 1000px)**：
+  - 浮動面板風箏半徑滑桿調整上限從 300px 放寬至 **1000px**（步進 20px），提供更寬廣的走位自訂彈性。
+- **🛡️ 狹窄地形與撞牆避障雙層防護**：
+  - 當以 800px 大半徑巡航遇到地圖邊界或障礙物時，先智慧嘗試反向旋轉；若兩側均受地形受限（如狹窄走廊或通道），自動調用 `walk.nearestWalkable` 貼合最近可行走網格邊緣滑動，絕不原地卡死或震盪。
+
 
 ## 🚀 v2.0.3 (2026-11-18) - 戰鬥自動走位拾荒/風箏系統、智慧重刷策略 (先單張後全部) 與反作弊陷阱全面拆彈瓦解
 
