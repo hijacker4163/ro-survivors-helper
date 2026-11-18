@@ -5,7 +5,7 @@
 <div align="center">
 
 [![Buy Me a Coffee](https://img.shields.io/badge/Ko--fi-請兔子喝杯咖啡-ff5e5b?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/martianrabbit)
-[![Version](https://img.shields.io/badge/Version-2.0.1-blue.svg?style=for-the-badge)](https://github.com/hijacker4163/ro-survivors-helper)
+[![Version](https://img.shields.io/badge/Version-2.0.3-blue.svg?style=for-the-badge)](https://github.com/hijacker4163/ro-survivors-helper)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 
 **🐰 位於南半球從火星下來的兔子程式員 (Martian Rabbit) 精心打造 🚀**  
@@ -13,6 +13,36 @@
 👉 **[點此贊助請喝咖啡 (Ko-fi)](https://ko-fi.com/martianrabbit)**
 
 </div>
+
+---
+
+## 🚀 v2.0.3 (2026-11-18) - 戰鬥自動走位拾荒/風箏系統、智慧重刷策略 (先單張後全部) 與反作弊陷阱全面拆彈瓦解
+
+### 🌟 核心更新與突破
+- **🏃 全新戰鬥自動走位與智慧拾荒/風箏系統 (Battle Auto-Movement & Smart Looting Engine)**：
+  - **智慧拾荒撿寶模式 (Smart Loot)**：
+    - 即時掃描場上所有掉落物，依權重自動尋路走向：🧲 全圖磁鐵 ➔ 🥩 緊急補血肉塊 ➔ 🎴 神秘卡片 ➔ 🏮 節慶掉落 ➔ 🗡️ 神裝 ➔ 💰 金幣 ➔ 💎 經驗水晶。
+    - **金幣與開箱防卡死機制**：即時讀取玩家金幣與動態開箱費用（`chestCost`）。當金幣不足開箱且場上有未開寶箱時，大幅提升撿金幣權重；若玩家距離寶箱過近 (< 65px)，自動後退並保持 85px 安全距離，徹底杜絕沒錢開箱站著不動卡死的問題！
+  - **圓周風箏走位模式 (Orbital Kiting)**：
+    - 圍繞戰鬥巡航錨點進行圓周動態風箏拉打，內建可行走網格避障檢測（`walk.walkable`），遇障礙自動平滑反轉角速度。
+    - 支援面板動態調整風箏半徑（100px ~ 300px，預設 180px）。
+  - **定點防守求生模式 (Stationary Defense)**：
+    - 保持原地站立輸出，僅在 380px 範圍內拾取高價值物資與補血肉塊，適合防守流派。
+  - **真人手動避讓機制**：
+    - 玩家手動按鍵 (WASD 或方向鍵) 時，助手即時偵測並平滑交出控制權 2 秒，手動走位不衝突。
+- **🎲 技能無專注時智慧重刷機制 (Smart Reroll: Single-Card then Reroll All)**：
+  - **第一順位優先單張重刷**：選技能時若畫面上沒有任何專注技能，逐張尋找非專注卡片上的「單張重刷」按鈕；若有次數且未反灰，優先執行單張重刷，只要洗出專注技能立即選取！
+  - **第二順位單張用盡重刷全部**：若畫面上所有卡片的單張重刷次數均已耗盡（`small === 0` 或反灰），但畫面上仍無專注技能，自動使用底部『重刷全部』(Reroll All / Reroll deck)！
+  - **面板開關與歷史紀錄整合**：懸浮面板新增 `🎲 智慧重刷 (先單張後全部)` 切換開關；選擇紀錄彈窗清晰記錄每一步重刷軌跡。
+- **🛡️ 遊戲官方反作弊陷阱深入拆彈與金鐘罩防護 (Anti-Cheat Defang & Stealth Shield)**：
+  - **根本原因深入逆向**：針對遊戲伺服器最新發布之 `main-dB6Oiefn.js` 深入剖析，鎖定惡意反作弊陷阱 `springTrap()`、計數器 `iq(a)` 與 `Vj()`（非原生點擊 `Vh >= 10` 觸發）。
+  - **原型鏈陷阱拔除 (Defang `springTrap`)**：於 `WeakRef.prototype.deref` 攔截戰鬥引擎實例時，將原型鏈上的 `springTrap()` 直接替換為空函數，惡意 BOSS 召喚與「偵測到使用外掛」宣告徹底失效。
+  - **死鎖即死計時器 (Permanent Lock `trapAt = -1`)**：透過 `Object.defineProperty` 將實例與原型上的 `trapAt` 與 `trapShotAt` 死鎖為 `-1`，杜絕即死判定與截圖回傳。
+  - **選卡點擊原生化 (Direct `onclick` Execution)**：改為優先調用卡片與按鈕原生的 JS `onclick()` 綁定函數，杜絕向 window 派發帶有 `!isTrusted` 的 DOM 合成點擊，`Vh` 計數器永遠維持 0。
+  - **惡意怪物消滅與特徵清理**：每幀走位循環時，若發現場上有帶有 `trap: true` 的殘留怪獸立即將其狀態設為 `dead`；自動清理黑名單全局變數與 storage 特徵。
+- **📊 戰鬥指標優化與統計雙擊重設**：
+  - 區分記錄進圖、通關 (🏆)、失敗 (💀)、中斷 (🚪) 四大關鍵指標。
+  - 支援雙擊統計區塊即時重設所有數據為 0。
 
 ---
 

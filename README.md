@@ -4,7 +4,7 @@
 
 <img src="logo.webp" alt="Martian Rabbit Logo" width="160" style="border-radius: 20px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); margin-bottom: 14px;" />
 
-[![Version](https://img.shields.io/badge/Version-2.0.1-blue.svg?style=for-the-badge)](https://github.com/hijacker4163/ro-survivors-helper)
+[![Version](https://img.shields.io/badge/Version-2.0.3-blue.svg?style=for-the-badge)](https://github.com/hijacker4163/ro-survivors-helper)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-Buy%20Me%20a%20Coffee-ff5f5f.svg?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/martianrabbit)
 
@@ -31,6 +31,9 @@
   - **Party Leader**: Select friends from friend list with one-click automatic invites.
   - **Party Member**: Auto-accept party invites and follow party leader.
   - Strict lobby readiness watchdog (checks channel, plaza presence, and 5s safe sync period).
+- 🏃 **Battle Auto-Movement & Smart Looting Engine**: Three specialized movement modes: "Smart Looting" (pathfinds to magnets, meat, gems, equipment), "Orbital Kiting" (dynamic perimeter kiting around anchor), and "Stationary Defense" (stands ground, loots immediate vicinity). Built-in chest affordability check and anti-stuck safe distance.
+- 🎲 **Smart Reroll (Single Card then Reroll All)**: When no focused skills appear on level-up, prioritizes single-card reroll on non-focused cards first. If single-card rerolls are exhausted, automatically activates "Reroll All" (Reroll Deck).
+- 🛡️ **Anti-Cheat Defang & Stealth Shield**: Prototypes-level neutralization of in-game `springTrap()` cheat monsters, permanent lock of `trapAt = -1` preventing instant-kill checks, network-level drop of `POST /env` reports, and silent native event execution.
 - 🎒 **In-Run Items & Deity Strategy (Smart Anti-Slot Occupation)**:
   - Comprehensive database of **51 in-run items** (Potions, Elixirs, Blessings, Dishes, Deities) crawled directly from the game wiki.
   - **1-Click Presets**: "⭐ Recommended Core" and "💰 Loot Farming (Zeny / Discovery / Luck / Plenty)".
@@ -69,6 +72,20 @@
   - **隊長模式**：直接於浮動面板勾選好友名單，自動發送邀請。
   - **隊員模式**：全自動同意入隊、自動跟隨隊長分流與出發。
   - 嚴格大廳同步安全期，隊長端嚴格檢查全員在同頻道廣場就緒，防止單人誤進。
+- 🏃 **戰鬥自動走位與智慧拾荒/風箏系統 (Battle Auto-Movement & Smart Looting Engine)**：
+  - **三大走位模式**：「智慧拾荒撿寶 (Smart Loot)」、「圓周風箏走位 (Orbital Kiting)」、「定點防守求生 (Stationary Defense)」。
+  - **物資智能吸附**：依權重自動尋路走向全圖磁鐵、補血肉塊、神秘卡片、節慶掉落、神裝、金幣、經驗水晶。
+  - **寶箱防卡死安全機制**：即時計算當前金幣與開箱費用，錢不夠時與未開啟寶箱保持 85px 安全距離，避免原地卡死。
+  - **真人手動避讓**：玩家手動操作方向鍵 (WASD/方向鍵) 即刻平滑交出控制權 2 秒。
+- 🎲 **選技能無專注時智慧重刷 (Smart Reroll: Single then All)**：
+  - 升級選卡畫面上無任何專注技能時，第一順位優先使用「單張重刷」，逐張刷新非專注技能。
+  - 若單張重刷次數用盡仍無專注技能，第二順位自動使用『重刷全部』(Reroll All / Reroll deck)。
+  - 面板內建獨立開關，選卡歷史紀錄完整標記每一步重刷軌跡。
+- 🛡️ **全方位反作弊陷阱瓦解與金鐘罩防護 (Anti-Cheat Defang & Stealth Shield)**：
+  - 原型鏈全面拔除 `springTrap()` 惡魔怪物陷阱，惡意 BOSS 召喚與「偵測到使用外掛」警報徹底無效化。
+  - 透過 `Object.defineProperty` 將 `trapAt` 與 `trapShotAt` 死鎖為 `-1`，杜絕即死判定與截圖舉報。
+  - 選卡事件優先以原生 JS `onclick` 執行，杜絕向 window 派發非原生 DOM 合成事件，反作弊計數器永遠歸零。
+  - 網路層封鎖 `POST /env` 作弊封包，偽裝 `POST /op` 結算遙測數據為真實人類常態分佈。
 - 🎒 **關卡內 51 種道具與神祇配置彈窗（智慧避佔位引擎）**：
   - 完整收錄藥水 (12種)、秘藥 (10種)、祝福 (10種)、料理 (6種)、神祇 (13種) 權威資料庫。
   - **快捷預設**：一鍵配置「⭐ 推薦核心專注」與「💰 打寶專注（金幣/尋寶/驚奇/豐饒/幸運/採集）」。
