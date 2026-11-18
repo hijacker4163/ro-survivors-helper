@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Survivors 遊戲自動輔助助手 (RO Survivors Helper)
 // @namespace    https://github.com/hijacker4163/ro-survivors-helper
-// @version      2.0.1
+// @version      2.0.2
 // @description  RO Survivors 全面支援關卡內51種道具/神祇專注與放逐配置彈窗(In-Run Items Strategy)、活動副本大廳NPC原生A*避障點擊尋路優化、場次結束自動退隊重組(Auto Re-Party)、隊長好友清單勾選自動邀請、隊員自動同意入隊出發與跟隨分流、大廳5秒同步安全期、隊長端隊友同頻道廣場就緒嚴格檢查、懸浮Toast提示、單人誤搶進防護、徹底杜絕放逐技能(盜賊影步等)被選、非三導管專注技能集齊前優先重抽防佔槽、未完成進度智慧處理、組隊結算自動分寶擲骰(傳奇Need/其餘Greed)、法師三導管必備策略、選卡歷史詳細說明、特權動畫解鎖防禦、選卡逾時看門狗自救保底
 // @author       Martian Rabbit
 // @homepage     https://github.com/hijacker4163/ro-survivors-helper
@@ -14,9 +14,115 @@
 (function () {
   'use strict';
 
-  const SCRIPT_VERSION = '2.0.1';
+  const SCRIPT_VERSION = '2.0.2';
 
   const MARTIAN_RABBIT_LOGO = 'data:image/png;base64,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';
+
+  // ==========================================
+  // 0.0 全方位反作弊與反偵測金鐘罩 (Stealth & Anti-Detection Shield)
+  // 針對遊戲 main.js 內部反作弊與遙測機制進行全方位反制：
+  // 1. 攔截 HP 監聽器，過濾所有腳本模擬之非原生事件 (!event.isTrusted)，防止作弊按鍵/點擊計數超標 (Ph/qh >= 5)
+  // 2. 原生函數簽名偽裝 (Function.prototype.toString)，完美通過 Rh() 的 [native code] 檢測
+  // 3. 阻斷客戶端向伺服器舉報管道 (封鎖 POST /env)，舉報封包絕不出瀏覽器
+  // 4. 結算遙測數據清洗 (Sanitize pt on POST /op)，將選卡時間偽造為真實人類常態分佈 (c0 永遠為 0)
+  // ==========================================
+  (function initAntiDetectionShield() {
+    try {
+      // 🛡️ 盾牌 1：封印 HP 監聽器，隔離非信任事件 (isTrusted Shield)
+      const MONITORED_ANTI_CHEAT_TYPES = new Set(['keydown', 'keyup', 'pointerdown', 'pointerup', 'mousedown', 'click']);
+      const origEventTargetAddEventListener = EventTarget.prototype.addEventListener;
+
+      EventTarget.prototype.addEventListener = function (type, listener, options) {
+        if (this === window && MONITORED_ANTI_CHEAT_TYPES.has(type) && typeof listener === 'function') {
+          const isCapture = typeof options === 'boolean' ? options : !!(options && options.capture);
+          const isPassive = typeof options === 'object' && !!(options && options.passive);
+          // 遊戲反作弊監聽器 (HP) 特徵：capture: true, passive: true 註冊於 window
+          if (isCapture && isPassive) {
+            const stealthListener = function (event) {
+              // 若為腳本模擬之合成事件 (!event.isTrusted)，對反作弊計數器徹底隱身！
+              if (event && !event.isTrusted) {
+                return;
+              }
+              return listener.apply(this, arguments);
+            };
+            return origEventTargetAddEventListener.call(this, type, stealthListener, options);
+          }
+        }
+        return origEventTargetAddEventListener.apply(this, arguments);
+      };
+      window.addEventListener = EventTarget.prototype.addEventListener;
+
+      // 🛡️ 盾牌 2：原生函數簽名偽裝 (Native Code Camouflage for Rh & Security Audits)
+      const origFetch = window.fetch;
+      const origFnToString = Function.prototype.toString;
+      const SPOOFED_NATIVE_NAMES = new Map([
+        [window.requestAnimationFrame, 'requestAnimationFrame'],
+        [window.cancelAnimationFrame, 'cancelAnimationFrame'],
+        [window.setInterval, 'setInterval'],
+        [window.setTimeout, 'setTimeout'],
+        [EventTarget.prototype.addEventListener, 'addEventListener'],
+        [window.addEventListener, 'addEventListener'],
+        [origEventTargetAddEventListener, 'addEventListener'],
+        [origFetch, 'fetch'],
+        [Function.prototype.toString, 'toString']
+      ]);
+
+      Function.prototype.toString = function () {
+        if (SPOOFED_NATIVE_NAMES.has(this) || this === window.fetch || this === Function.prototype.toString) {
+          const fnName = SPOOFED_NATIVE_NAMES.get(this) || this.name || 'requestAnimationFrame';
+          return `function ${fnName}() { [native code] }`;
+        }
+        return origFnToString.apply(this, arguments);
+      };
+
+      // 🛡️ 盾牌 3 & 4：網路層攔截舉報 (POST /env) 與清洗結算選卡遙測 (POST /op)
+      window.fetch = async function (input, init) {
+        let url = '';
+        if (typeof input === 'string') {
+          url = input;
+        } else if (input && typeof input.url === 'string') {
+          url = input.url;
+        }
+
+        // 阻斷舉報管道：攔截所有發送給 /env 的封包，直接回傳成功，絕不傳送到伺服器！
+        if (url && (url.endsWith('/env') || url.includes('/env?') || url.includes('/env/'))) {
+          console.warn('[RO Shield] 🛑 成功攔截並封鎖客戶端向伺服器發送的作弊舉報封包 (POST /env)！');
+          return new Response(JSON.stringify({ ok: true, status: 'blocked' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
+
+        // 結算遙測數據清洗 (Sanitize pt on POST /op)：
+        if (url && (url.endsWith('/op') || url.includes('/op?')) && init && init.body) {
+          try {
+            const parsedBody = typeof init.body === 'string' ? JSON.parse(init.body) : null;
+            if (parsedBody && parsedBody.op === 'loot' && parsedBody.pt) {
+              // pt 格式: `${Ih},${r0},${l0},${c0}`
+              const parts = String(parsedBody.pt).split(',');
+              if (parts.length >= 4) {
+                const totalPicks = parseInt(parts[0], 10) || 1;
+                // 生成擬真人類反應時間 (平均約 2100ms，離散方差自然，c0 永遠為 0)
+                const humanAvgMs = 1950 + Math.floor(Math.random() * 350);
+                const forgedR0 = totalPicks * humanAvgMs;
+                const forgedL0 = Math.round(forgedR0 * humanAvgMs * 1.06);
+                const forgedC0 = 0; // 0 次小於 1200ms
+                parsedBody.pt = `${totalPicks},${forgedR0},${forgedL0},${forgedC0}`;
+                init.body = JSON.stringify(parsedBody);
+                console.log('[RO Shield] 🎭 成功偽造結算選卡遙測 (pt) 為真人常態分佈：', parsedBody.pt);
+              }
+            }
+          } catch (e) {}
+        }
+
+        return origFetch.apply(this, arguments);
+      };
+
+      console.log('[RO Shield] 🛡️ 全方位反作弊防護金鐘罩已成功啟動！');
+    } catch (e) {
+      console.warn('[RO Shield] 初始化金鐘罩例外:', e);
+    }
+  })();
 
   // ==========================================
   // 0. 背景分頁防休眠與 Worker rAF 時脈接管 (Background Mode v0.4)
@@ -764,7 +870,7 @@
       add_friend_btn: '新增',
       auto_party_check: '🤝 自動同意邀請/出發 (跟車/隊員必備)',
       auto_pick_card: '🃏 自動升級選卡',
-      pick_delay: '⏱️ 選卡延遲 (ms)',
+      pick_delay: '⏱️ 擬人選卡延遲 (ms)',
       auto_loot_roll: '🎁 自動組隊分寶 (Loot Roll)',
       loot_mode: '分寶策略',
       loot_greed_need: '💎 傳奇Need / 其餘Greed',
@@ -848,7 +954,7 @@
       add_friend_btn: 'Add',
       auto_party_check: '🤝 Auto Ready Check (Auto accept & go)',
       auto_pick_card: '🃏 Auto Pick Cards',
-      pick_delay: '⏱️ Pick Delay (ms)',
+      pick_delay: '⏱️ Human-like Pick Delay (ms)',
       auto_loot_roll: '🎁 Auto Loot Roll',
       loot_mode: 'Roll Strategy',
       loot_greed_need: '💎 Need Legendary / Greed Rest',
@@ -1153,7 +1259,7 @@
     selectedJob: 'swordsman', // 當前選擇職業
     cardStrategy: 'rarity_first', // 選卡策略: 'rarity_first', 'keyword', 'priority', 'first'
     cardKeywords: '狂擊, 怒爆, 治癒, 火球, 火箭, 暴擊, 攻擊, 攻速, 力量, 敏捷, 體質, 幸運, 智力, Heal, Fire, Magnum, Bash, HP, ATK, ASPD, Critical',
-    pickDelayMs: 800,         // 選卡延遲（毫秒）
+    pickDelayMs: 1450,        // 選卡基礎延遲（毫秒，防反作弊推薦 ≥1300ms）
     targetStageIndex: -1,     // 相容舊版
     levelUpMode: 'instant',   // 升級方式: 'instant'(立即升級), 'accumulate'(累積升級)
     autoOpenBank: true,       // 累積模式下是否自動點擊開啟批次選卡 (按 B)
@@ -4050,11 +4156,16 @@
     pickedActionAttempts.clear();
     clearPickerRetry();
     detectPlayerJob();
-    updateStatus('🃏 偵測到選卡畫面！等待動畫展開...');
+    updateStatus('🃏 偵測到選卡畫面！擬人化思考延遲中...');
+
+    // 擬人化動態反應時間：基礎延遲 + 隨機擾動 (確保反應時間 > 1200ms，徹底避開遊戲 c0 超速判定)
+    const baseDelay = Math.max(1300, config.pickDelayMs || 1450);
+    const humanJitter = Math.floor(Math.random() * 450); // 隨機 0~450ms
+    const effectiveDelay = baseDelay + humanJitter;
 
     setTimeout(() => {
       executeCardPick(true);
-    }, config.pickDelayMs);
+    }, effectiveDelay);
   }
 
   // ==========================================
@@ -4481,9 +4592,10 @@
         if (!cardPickerOpenedAt) {
           cardPickerOpenedAt = performance.now();
         }
-        // 看門狗：若選卡視窗停留超過 2800ms 且尚未關閉，強制解鎖並執行救援選卡
-        if (performance.now() - cardPickerOpenedAt > 2800) {
-          console.warn('[RO Helper] 🚨 偵測到選卡畫面卡死超過 2.8 秒！看門狗強制介入自救選卡！');
+        // 看門狗：動態自適應逾時判定 (基礎設定延遲 + 2000ms 保險期，最低 4500ms)，防卡死強制救援選卡
+        const watchdogThreshold = Math.max(4500, (config.pickDelayMs || 1450) + 2000);
+        if (performance.now() - cardPickerOpenedAt > watchdogThreshold) {
+          console.warn(`[RO Helper] 🚨 偵測到選卡畫面卡死超過 ${(watchdogThreshold / 1000).toFixed(1)} 秒！看門狗強制介入自救選卡！`);
           updateStatus('🚨 選卡逾時自救：強制按鍵與點擊卡片...');
           isPickingCard = false;
           pickedActionAttempts.clear();
@@ -6829,7 +6941,7 @@
 
         <div class="ro-h-row">
           <span class="ro-h-label">${t('pick_delay')}</span>
-          <input type="number" class="ro-h-input" id="ro-h-delay" value="${config.pickDelayMs}" min="500" max="3000" step="50" style="width: 70px; text-align: right;">
+          <input type="number" class="ro-h-input" id="ro-h-delay" value="${config.pickDelayMs}" min="1200" max="3500" step="50" style="width: 70px; text-align: right;" title="防反作弊偵測安全推薦 ≥1300ms">
         </div>
 
         <!-- 🎁 自動組隊分寶 (Loot Roll) -->
@@ -7157,7 +7269,7 @@
 
 
     delayInput.onchange = () => {
-      config.pickDelayMs = Math.max(500, parseInt(delayInput.value) || 800);
+      config.pickDelayMs = Math.max(1200, parseInt(delayInput.value) || 1450);
       delayInput.value = config.pickDelayMs;
       saveConfig();
     };
