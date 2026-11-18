@@ -5,7 +5,7 @@
 <div align="center">
 
 [![Buy Me a Coffee](https://img.shields.io/badge/Ko--fi-請兔子喝杯咖啡-ff5e5b?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/martianrabbit)
-[![Version](https://img.shields.io/badge/Version-2.0.4--2-blue.svg?style=for-the-badge)](https://github.com/hijacker4163/ro-survivors-helper)
+[![Version](https://img.shields.io/badge/Version-2.0.4--3-blue.svg?style=for-the-badge)](https://github.com/hijacker4163/ro-survivors-helper)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 
 **🐰 位於南半球從火星下來的兔子程式員 (Martian Rabbit) 精心打造 🚀**  
@@ -15,6 +15,16 @@
 </div>
 
 ---
+
+## 🚀 v2.0.4-3 (2026-11-18) - 技能與道具選擇歷史紀錄智慧滾動錨定 (Smart Scroll Anchor 防回頂端干擾)
+
+### 🌟 核心更新與優化
+- **📜 歷史紀錄清單智慧滾動錨定 (Smart Scroll Anchor)**：
+  - 徹底解決彈窗開啟時若有新選卡/開寶箱紀錄加入，整個清單會被強制拉回頂端重置的惱人體驗。
+  - **區域動態增量更新**：有新紀錄寫入時，僅針對 `#ro-hist-list-container` 與筆數統計執行局部渲染，不再重建整個彈窗與 CSS。
+  - **精確像素級高度補償**：若使用者正向下滾動查看歷史（`scrollTop > 20px`），系統即時計算新插入卡片所增加的實際高度差（`heightDiff`），自動進行像素級補償校準。**使用者當前正在閱讀的項目完全凝結於螢幕同一位置，零抖動、零干擾！**
+  - **頂端常規查看保持**：若使用者位於清單最上方（`scrollTop <= 20px`），則自動顯示最新選取的項目，兼顧實時監控與回溯查看兩種情境。
+
 
 ## 🚀 v2.0.4-2 (2026-11-18) - 兩階段階梯式組隊守護架構 (方案A 60s原生等待 / 方案B 退隊等10s重組 / 隊長移交偵測與跟隨退隊 / 120s單人進圖自救)
 

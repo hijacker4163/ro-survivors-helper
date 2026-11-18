@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Survivors 遊戲自動輔助助手 (RO Survivors Helper)
 // @namespace    https://github.com/hijacker4163/ro-survivors-helper
-// @version      2.0.4-2
+// @version      2.0.4-3
 // @description  RO Survivors 全面支援關卡內51種道具/神祇專注與放逐配置彈窗(In-Run Items Strategy)、活動副本大廳NPC原生A*避障點擊尋路優化、場次結束自動退隊重組(Auto Re-Party)、隊長好友清單勾選自動邀請、隊員自動同意入隊出發與跟隨分流、大廳5秒同步安全期、隊長端隊友同頻道廣場就緒嚴格檢查、懸浮Toast提示、單人誤搶進防護、徹底杜絕放逐技能(盜賊影步等)被選、非三導管專注技能集齊前優先重抽防佔槽、未完成進度智慧處理、組隊結算自動分寶擲骰(傳奇Need/其餘Greed)、法師三導管必備策略、選卡歷史詳細說明、特權動畫解鎖防禦、選卡逾時看門狗自救保底
 // @author       Martian Rabbit
 // @homepage     https://github.com/hijacker4163/ro-survivors-helper
@@ -14,7 +14,7 @@
 (function () {
   'use strict';
 
-  const SCRIPT_VERSION = '2.0.4-2';
+  const SCRIPT_VERSION = '2.0.4-3';
 
   let activeBattleGameInstance = null;
 
@@ -7480,7 +7480,7 @@
       modal.id = 'ro-helper-history-modal';
       document.body.appendChild(modal);
     }
-    renderHistoryModalContent();
+    renderHistoryModalContent(true);
     modal.style.display = 'flex';
   }
 
@@ -7495,13 +7495,16 @@
     if (confirm('確定要清空所有選卡與道具選擇歷史紀錄嗎？清空後將無法還原。')) {
       pickHistory = [];
       savePickHistory();
-      renderHistoryModalContent();
+      renderHistoryModalContent(true);
     }
   }
 
-  function renderHistoryModalContent() {
+  function renderHistoryModalContent(forceFullRebuild = false) {
     const modal = document.getElementById('ro-helper-history-modal');
     if (!modal) return;
+
+    const listContainer = document.getElementById('ro-hist-list-container');
+    const canPartialUpdate = !forceFullRebuild && listContainer && modal.querySelector('.ro-hist-modal-box');
 
     const rarityColors = {
       0: '#94a3b8',
@@ -7573,6 +7576,28 @@
           </div>
         `;
       }).join('');
+    }
+
+    if (canPartialUpdate) {
+      // 🎯 智慧滾動位置保持 (Smart Scroll Anchor)
+      // 若使用者正在滾動查看歷史 (scrollTop > 20)，新紀錄加入頂端時自動計算高度差並精確補償，絕不跳回頂端！
+      const prevScrollTop = listContainer.scrollTop;
+      const prevScrollHeight = listContainer.scrollHeight;
+
+      listContainer.innerHTML = historyHtml;
+
+      const footerNote = modal.querySelector('.ro-hist-footer-note');
+      if (footerNote) {
+        footerNote.textContent = `共 ${pickHistory.length} 筆紀錄（最多保存最近 50 筆）`;
+      }
+
+      if (prevScrollTop > 20) {
+        const heightDiff = listContainer.scrollHeight - prevScrollHeight;
+        listContainer.scrollTop = prevScrollTop + (heightDiff > 0 ? heightDiff : 0);
+      } else {
+        listContainer.scrollTop = 0;
+      }
+      return;
     }
 
     modal.innerHTML = `

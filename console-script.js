@@ -1,10 +1,10 @@
-// RO Survivors 主控台即貼即用腳本 v2.0.4-2
+// RO Survivors 主控台即貼即用腳本 v2.0.4-3
 // @author       Martian Rabbit
 // @homepage     https://github.com/hijacker4163/ro-survivors-helper
 (function () {
   'use strict';
 
-  const SCRIPT_VERSION = '2.0.4-2';
+  const SCRIPT_VERSION = '2.0.4-3';
 
   let activeBattleGameInstance = null;
 
@@ -7470,7 +7470,7 @@
       modal.id = 'ro-helper-history-modal';
       document.body.appendChild(modal);
     }
-    renderHistoryModalContent();
+    renderHistoryModalContent(true);
     modal.style.display = 'flex';
   }
 
@@ -7485,13 +7485,16 @@
     if (confirm('確定要清空所有選卡與道具選擇歷史紀錄嗎？清空後將無法還原。')) {
       pickHistory = [];
       savePickHistory();
-      renderHistoryModalContent();
+      renderHistoryModalContent(true);
     }
   }
 
-  function renderHistoryModalContent() {
+  function renderHistoryModalContent(forceFullRebuild = false) {
     const modal = document.getElementById('ro-helper-history-modal');
     if (!modal) return;
+
+    const listContainer = document.getElementById('ro-hist-list-container');
+    const canPartialUpdate = !forceFullRebuild && listContainer && modal.querySelector('.ro-hist-modal-box');
 
     const rarityColors = {
       0: '#94a3b8',
@@ -7563,6 +7566,28 @@
           </div>
         `;
       }).join('');
+    }
+
+    if (canPartialUpdate) {
+      // 🎯 智慧滾動位置保持 (Smart Scroll Anchor)
+      // 若使用者正在滾動查看歷史 (scrollTop > 20)，新紀錄加入頂端時自動計算高度差並精確補償，絕不跳回頂端！
+      const prevScrollTop = listContainer.scrollTop;
+      const prevScrollHeight = listContainer.scrollHeight;
+
+      listContainer.innerHTML = historyHtml;
+
+      const footerNote = modal.querySelector('.ro-hist-footer-note');
+      if (footerNote) {
+        footerNote.textContent = `共 ${pickHistory.length} 筆紀錄（最多保存最近 50 筆）`;
+      }
+
+      if (prevScrollTop > 20) {
+        const heightDiff = listContainer.scrollHeight - prevScrollHeight;
+        listContainer.scrollTop = prevScrollTop + (heightDiff > 0 ? heightDiff : 0);
+      } else {
+        listContainer.scrollTop = 0;
+      }
+      return;
     }
 
     modal.innerHTML = `
