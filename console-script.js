@@ -1,10 +1,10 @@
-// RO Survivors 主控台即貼即用腳本 v2.0.4-1
+// RO Survivors 主控台即貼即用腳本 v2.0.4-2
 // @author       Martian Rabbit
 // @homepage     https://github.com/hijacker4163/ro-survivors-helper
 (function () {
   'use strict';
 
-  const SCRIPT_VERSION = '2.0.4-1';
+  const SCRIPT_VERSION = '2.0.4-2';
 
   let activeBattleGameInstance = null;
 
@@ -1678,18 +1678,22 @@
   let lastKnownGameState = 'UNKNOWN';
   let lobbyEnteredAt = 0;              // 返回大廳的時間戳記 (用於結算後冷卻等待)
   let wasInParty = false;              // 記錄上局是否處於組隊狀態 (防剛回大廳瞬間單人搶進)
-  const LOBBY_POST_RUN_COOLDOWN_MS = 5000; // 結算回大廳後之隊友同步安全緩衝期 (5 秒)
+  let originalLeaderName = '';         // 記錄上一局或剛進大廳時的原隊長名稱 (隊員模式下用於偵測隊長退隊)
+  const LOBBY_POST_RUN_COOLDOWN_MS = 15000; // 結算回大廳後之隊友同步安全緩衝期 (放寬至 15 秒)
   let partyLeaveTriggered = false;     // 本次返回大廳後是否已觸發過退隊重組
   let partyLeftAt = 0;                 // 退出隊伍的時間戳記 (退隊後伺服器狀態重置緩衝)
   let partyAllReadyAt = 0;             // 全員入隊且就緒的時間戳記 (出發前連線穩定緩衝)
   let lastInviteSentAt = 0;            // 上次向好友發送組隊邀請的時間戳記 (防狂點)
   let isLeavingParty = false;          // 是否正在執行退隊中
 
-  // 🛡️ 組隊防死迴圈逾時保護常數與狀態 (Anti-Deadlock Guards)
-  const PARTY_MEMBER_WAIT_INVITE_TIMEOUT_MS = 30000; // 隊員無隊伍待命逾時 (30秒後自動單人出發)
-  const PARTY_MEMBER_WAIT_START_TIMEOUT_MS = 60000;  // 隊員在隊伍中等隊長出發逾時 (60秒後自動退隊出發)
-  const PARTY_LEADER_INVITE_TIMEOUT_MS = 20000;      // 隊長邀請單一好友逾時 (20秒未入隊則略過)
-  const PARTY_LEADER_WAIT_READY_TIMEOUT_MS = 35000;  // 隊長等隊友同頻道廣場就緒逾時 (35秒未就緒則自動出發)
+  // 🛡️ 組隊階梯式守護與防死迴圈逾時保護常數 (Two-Phase Party Scheme Guards)
+  const SCHEME_A_WAIT_MEMBERS_TIMEOUT_MS = 60000;     // 方案 A：原生隊伍等待隊友最長時間 (60 秒)
+  const SCHEME_A_NO_REPARTY_SOLO_TIMEOUT_MS = 120000; // 未勾選重組時：等待滿 120 秒後自行單人出發
+  const REPARTY_LEADER_POST_LEAVE_COOLDOWN_MS = 10000;// 方案 B：隊長退出隊伍後等待 10 秒才開始重新發送邀請
+  const PARTY_LEADER_INVITE_TIMEOUT_MS = 20000;       // 隊長邀請單一好友逾時 (20秒未入隊則略過)
+  const PARTY_LEADER_WAIT_READY_TIMEOUT_MS = 60000;   // 隊長等隊友同頻道廣場就緒逾時 (60秒)
+  const PARTY_MEMBER_WAIT_INVITE_TIMEOUT_MS = 90000;  // 隊員無隊伍待命逾時 (90秒後自動單人出發)
+  const PARTY_MEMBER_WAIT_START_TIMEOUT_MS = 130000;  // 隊員在隊伍中等隊長出發逾時 (130秒後自動退隊出發)
 
   let memberWaitPartySince = 0;        // 隊員端無隊伍待命開始時間
   let memberPartyIdleSince = 0;        // 隊員端在隊伍中等隊長出發開始時間
@@ -2547,6 +2551,13 @@
       if (acceptBtn) {
         wasInParty = true;
         partyLeaveTriggered = true; // 關鍵！標記已處於新隊伍，避免剛入隊又被自身退隊重組腳本退掉
+        try {
+          const m = dialogFullText.match(/<b>(.*?)<\/b>/i) || dialog.innerHTML.match(/<b>(.*?)<\/b>/i);
+          if (m && m[1]) {
+            const inviter = m[1].replace(/<[^>]+>/g, '').trim();
+            if (inviter) originalLeaderName = inviter;
+          }
+        } catch (e) {}
         if (gameOverRestartTimer) {
           clearTimeout(gameOverRestartTimer);
           gameOverRestartTimer = null;
@@ -2622,15 +2633,17 @@
       wasInParty = true;
     } else {
       // 隊伍面板不存在或只有自己一人在隊伍框中 (無隊伍或單人模式)
-      // 若剛回大廳且在安全緩衝期內 (5秒)，若上一局為組隊，允許等待隊伍連線資料同步
-      if (wasInParty && timeSinceLobby < LOBBY_POST_RUN_COOLDOWN_MS) {
-        const sec = Math.max(1, Math.ceil((LOBBY_POST_RUN_COOLDOWN_MS - timeSinceLobby) / 1000));
+      // 關鍵保護：若上一局為組隊，或設定為隊長且有勾選隊友，在方案A(60s)/未重組(120s)緩衝期內，絕不准誤判為單人模式！
+      const isConfiguredParty = wasInParty || (config.partyRole === 'leader' && (config.partyInviteFriends?.length || 0) > 0);
+      const partyWaitLimit = config.autoReParty ? SCHEME_A_WAIT_MEMBERS_TIMEOUT_MS : SCHEME_A_NO_REPARTY_SOLO_TIMEOUT_MS;
+      if (isConfiguredParty && timeSinceLobby < partyWaitLimit) {
+        const sec = Math.max(1, Math.ceil((partyWaitLimit - timeSinceLobby) / 1000));
         return {
           inParty: true,
-          isLeader: true, // 保守假設為隊長，防止未同步時誤以單人模式搶進
+          isLeader: config.partyRole === 'leader',
           ready: false,
           memberCount: rows.length,
-          reason: `隊伍資料同步中 (${sec}s)...`
+          reason: `隊伍資料同步與成員載入中 (${sec}s)...`
         };
       }
       // 超過緩衝期，或本來就不是組隊狀態：徹底解除 wasInParty 標記，確認為單人模式！
@@ -2659,6 +2672,19 @@
         memberCount: rows.length,
         reason: '無其他隊友'
       };
+    }
+
+    // 隊員端：記錄持有 .pf-lead 的隊友為原隊長名稱
+    if (!isLeader) {
+      const leadRow = partyFrame.querySelector('.pf-row:not(.me):has(.pf-lead)') ||
+                      partyFrame.querySelector('.pf-row:not(.me) .pf-lead')?.closest('.pf-row');
+      if (leadRow) {
+        const leadName = (leadRow.querySelector('.pf-name b')?.textContent ||
+                          leadRow.querySelector('.pf-name')?.childNodes[0]?.textContent || '').trim();
+        if (leadName) {
+          originalLeaderName = leadName;
+        }
+      }
     }
 
     const notReadyList = [];
@@ -2881,6 +2907,7 @@
    */
   function resetToSolo() {
     wasInParty = false;
+    originalLeaderName = '';
     isLeavingParty = false;
     partyLeaveTriggered = true;
     partyLeftAt = performance.now();
@@ -2928,206 +2955,282 @@
    * - 隊長邀請單一隊友 20 秒/3次未接受：自動略過該隊友出發
    * - 隊長等隊友廣場就緒逾時 35 秒：自動退隊單人出發
    */
+  /**
+   * 👥 組隊流程與兩階段階梯式重組守護管理器 (Two-Phase Party & Auto Re-Party Manager)
+   * 
+   * 架構設計：
+   * 1. 方案 A (原生隊伍等待，最長 60 秒)：
+   *    - 隊長返回大廳原地待命，等待隊員全數在同頻道廣場就緒。
+   *    - 60 秒內全員就緒 ➔ 穩定 2 秒後直接啟程進圖，不破壞隊伍！
+   * 2. 60 秒後若仍有隊員未就緒：
+   *    - 若勾選【自動重組】➔ 執行方案 B：
+   *      a) 隊長退出舊隊伍
+   *      b) 隊員偵測隊長離開 (原隊長不在名單 / 自己莫名變隊長 / 隊伍剩自己) ➔ 跟隨退出隊伍！
+   *      c) 隊長退出隊伍後等待 10 秒 (讓伺服器重置狀態)
+   *      d) 隊長開始向勾選好友發送邀請，全員就緒後進圖！
+   *    - 若未勾選【自動重組】：
+   *      隊長不退隊，持續等待至 120 秒；若滿 120 秒隊友仍未出現，隊長自行單人進圖自救！
+   */
   function handleAutoReParty() {
-    if (!config.autoReParty) return false;
     const state = detectGameState();
     if (state !== 'LOBBY') return false;
 
-    // 1. 場次結束返回大廳後，只有隊長端才自動執行退出隊伍重建 (隊員端保持待命跟隨，避免將剛接受的新組隊退掉產生時間差競態)
-    if (config.partyRole === 'leader' && wasInParty && !partyLeaveTriggered) {
-      const timeSinceLobby = performance.now() - lobbyEnteredAt;
-      // 剛回大廳前 3.0 秒預留給遊戲建立連線並渲染隊伍面板，確保全體隊員都已順利傳送回大廳
-      if (lobbyEnteredAt > 0 && timeSinceLobby < 3000) {
-        const sec = Math.max(1, Math.ceil((3000 - timeSinceLobby) / 1000));
-        updateStatus(`🏰 剛返回大廳，等待隊伍狀態就緒以執行退隊重組 (剩餘 ${sec} 秒)...`);
-        return true;
-      }
+    const targetFriends = config.partyInviteFriends || [];
+    const isConfiguredParty = wasInParty || (config.partyRole === 'leader' && targetFriends.length > 0) || config.partyRole === 'member' || config.autoReParty;
+    if (!isConfiguredParty) return false;
 
-      const partyFrame = document.getElementById('party-frame');
-      const isPartyVisible = partyFrame && !partyFrame.classList.contains('hidden') && partyFrame.style.display !== 'none';
-      const rows = partyFrame ? Array.from(partyFrame.querySelectorAll('.pf-row')) : [];
+    const timeSinceLobby = lobbyEnteredAt > 0 ? (performance.now() - lobbyEnteredAt) : 0;
 
-      if (isPartyVisible && rows.length > 0) {
-        partyLeaveTriggered = true;
-        partyLeftAt = performance.now();
-        updateStatus('🚪 [隊長重組] 場次結束，隊長自動退出舊隊伍以重建...');
-        showToast('🚪 [隊長重組] 退出舊隊伍，準備重組...', 2500);
-        leaveParty();
-        return true;
-      } else {
-        // 若隊伍面板已消失或不在隊伍中，標記為已退隊完成
-        partyLeaveTriggered = true;
-        partyLeftAt = performance.now();
-      }
-    } else if (config.partyRole === 'member') {
-      partyLeaveTriggered = true; // 隊員端始終保持待命，不主動退出隊伍
-    }
-
-    // 2. 隊員模式 (Member / Follower - 內建防死迴圈逾時自救)
+    // ──────────────────────────────────────────
+    // 1. 隊員模式 (Member / Follower)
+    // ──────────────────────────────────────────
     if (config.partyRole === 'member') {
       releaseAllMovementKeys();
-      const partyStatus = checkPartyReadiness();
+      const partyFrame = document.getElementById('party-frame');
+      const isPartyVisible = partyFrame && !partyFrame.classList.contains('hidden') && partyFrame.style.display !== 'none';
+      const rows = isPartyVisible ? Array.from(partyFrame.querySelectorAll('.pf-row')) : [];
+      const myRow = partyFrame?.querySelector('.pf-row.me');
+      const amILeader = Boolean(myRow?.querySelector('.pf-lead')) || Boolean(partyFrame?.classList.contains('leader'));
 
-      if (!partyStatus.inParty) {
-        // 情況 M1: 隊員目前不在隊伍中 (無隊伍)
-        memberPartyIdleSince = 0;
-        if (!memberWaitPartySince) {
+      if (isPartyVisible && rows.length > 0) {
+        // 情況 M-In: 目前在隊伍面板中
+        const memberNames = rows.map(r => (r.querySelector('.pf-name b')?.textContent || r.querySelector('.pf-name')?.childNodes[0]?.textContent || '').trim().toLowerCase());
+        const origLeadClean = (originalLeaderName || '').trim().toLowerCase();
+
+        // 🚨 深入研判「隊長是否已離開隊伍」：
+        // 1. 原隊長有名稱記錄，但已從成員名單中消失
+        // 2. 隊員自己莫名變成了隊長 (amILeader) -> 代表原隊長退隊後系統將隊長移交給了我
+        // 3. 隊伍只剩下自己 1 人 (rows.length <= 1) 且身為隊員 -> 隊長已退隊
+        const leaderLeft = (origLeadClean && !memberNames.includes(origLeadClean)) ||
+                           amILeader ||
+                           rows.length <= 1;
+
+        if (leaderLeft) {
+          console.log(`[RO Helper] 🚪 偵測到原隊長 [${originalLeaderName || '未知'}] 已退出隊伍 (amILeader:${amILeader}, rows:${rows.length})，隊員跟隨退出隊伍待命！`);
+          updateStatus(`🚪 [隊員跟隨] 偵測到隊長已退隊，跟隨退出隊伍待命...`);
+          showToast(`🚪 隊長已退隊，跟隨退出隊伍！`, 2500);
+          leaveParty();
+          wasInParty = false;
+          memberPartyIdleSince = 0;
           memberWaitPartySince = performance.now();
+          return true;
         }
-        const elapsed = performance.now() - memberWaitPartySince;
-        if (elapsed < PARTY_MEMBER_WAIT_INVITE_TIMEOUT_MS) {
-          const sec = Math.max(1, Math.ceil((PARTY_MEMBER_WAIT_INVITE_TIMEOUT_MS - elapsed) / 1000));
-          updateStatus(`🤝 [隊員待命] 等待隊長組隊邀請 (防卡死倒數 ${sec} 秒)...`);
-          return true; // 緩衝期內等待隊長邀請
-        } else {
-          // 🚨 逾時 30 秒！觸發防死迴圈自救：自動切換至單人模式出發！
-          console.warn('[RO Helper] 🚨 隊員模式等待組隊邀請超過 30 秒！觸發防卡死自救機制！');
-          updateStatus('🚶 [隊員防卡死] 未收到隊長組隊邀請，自動轉為單人模式出發！');
-          showToast('⚠️ [隊員防卡死] 超時未收到組隊邀請，自動單人出發！', 3500);
-          config.autoEnterMap = true;
-          return false; // 允許後續 handleEnterMap() 正常進圖
-        }
-      } else {
-        // 情況 M2: 隊員已在隊伍中，等待隊長發起出發
+
+        // 隊長依然健在！正常在隊伍中等待隊長發起出發
         memberWaitPartySince = 0;
         if (!memberPartyIdleSince) {
           memberPartyIdleSince = performance.now();
         }
         const elapsed = performance.now() - memberPartyIdleSince;
-        if (elapsed < PARTY_MEMBER_WAIT_START_TIMEOUT_MS) {
+        if (elapsed < PARTY_MEMBER_WAIT_START_TIMEOUT_MS) { // 130 秒
           const sec = Math.max(1, Math.ceil((PARTY_MEMBER_WAIT_START_TIMEOUT_MS - elapsed) / 1000));
-          updateStatus(`🤝 [隊員就緒] 已進入隊伍，等待隊長出發 (防卡死倒數 ${sec} 秒)...`);
-          return true; // 正常在隊伍中等待隊長發起出發
+          updateStatus(`🤝 [隊員就緒] 已在隊伍中，等待隊長啟程出發 (防卡死倒數 ${sec} 秒)...`);
+          return true;
         } else {
-          // 🚨 隊長卡死/掛機超過 60 秒！自動退出死隊伍自救！
-          console.warn('[RO Helper] 🚨 隊長在隊伍中超過 60 秒未出發！觸發防卡死退出隊伍！');
-          updateStatus('🚪 [隊員防卡死] 隊長超時未出發，自動退出隊伍並單人出發！');
-          showToast('⚠️ [隊員防卡死] 隊長超時無動作，自動退出隊伍！', 3500);
+          // 超過 130 秒隊長完全沒動作，退隊自救單人出發
+          console.warn('[RO Helper] 🚨 隊長在隊伍中超過 130 秒未出發！退隊單人出發自救！');
+          updateStatus('🚪 [隊員防卡死] 隊長超時無動作，自動退出隊伍單人出發！');
+          showToast('⚠️ [隊員防卡死] 隊長超時未出發，自動退隊！', 3500);
           leaveParty();
           wasInParty = false;
           config.autoEnterMap = true;
           memberPartyIdleSince = 0;
           return true;
         }
+      } else {
+        // 情況 M-Out: 目前不在隊伍中 (無隊伍狀態，等待隊長邀請)
+        memberPartyIdleSince = 0;
+        if (!memberWaitPartySince) {
+          memberWaitPartySince = performance.now();
+        }
+        const elapsed = performance.now() - memberWaitPartySince;
+        if (elapsed < PARTY_MEMBER_WAIT_INVITE_TIMEOUT_MS) { // 90 秒
+          const sec = Math.max(1, Math.ceil((PARTY_MEMBER_WAIT_INVITE_TIMEOUT_MS - elapsed) / 1000));
+          updateStatus(`🤝 [隊員待命] 等待隊長組隊邀請 (防卡死倒數 ${sec} 秒)...`);
+          return true;
+        } else {
+          // 逾時 90 秒未收到邀請，自動切換單人模式出發自救
+          console.warn('[RO Helper] 🚨 隊員模式等待組隊邀請超過 90 秒！切換單人模式出發！');
+          updateStatus('🚶 [隊員防卡死] 未收到隊長組隊邀請，自動轉為單人模式出發！');
+          showToast('⚠️ [隊員防卡死] 超時未收到組隊邀請，自動單人出發！', 3500);
+          config.autoEnterMap = true;
+          return false;
+        }
       }
     }
 
-    // 3. 隊長模式 (Leader - 內建防死迴圈逾時自救)
+    // ──────────────────────────────────────────
+    // 2. 隊長模式 (Leader)
+    // ──────────────────────────────────────────
     if (config.partyRole === 'leader') {
-      const targetFriends = config.partyInviteFriends || [];
-      if (targetFriends.length === 0) {
-        // 若隊長未勾選任何目標隊友，視為單人模式或自由出發
+      // 若隊長未勾選任何好友且上一局非組隊，視為單人模式
+      if (targetFriends.length === 0 && !wasInParty) {
         return false;
       }
 
-      // 退隊後緩衝期：退隊後等待 2.5 秒
-      if (partyLeftAt > 0 && performance.now() - partyLeftAt < 2500) {
-        const sec = Math.max(1, Math.ceil((2500 - (performance.now() - partyLeftAt)) / 1000));
-        updateStatus(`⏳ [隊長待命] 退隊完成，等待伺服器隊伍狀態重置 (${sec} 秒)...`);
+      // 前置安全期：剛回大廳前 3.0 秒，預留給遊戲建立連線並渲染隊伍面板
+      if (timeSinceLobby < 3000) {
+        const sec = Math.max(1, Math.ceil((3000 - timeSinceLobby) / 1000));
+        updateStatus(`🏰 剛返回大廳，等待隊友狀態同步 (剩餘 ${sec} 秒)...`);
         return true;
       }
 
-      const partyFrame = document.getElementById('party-frame');
-      const isPartyVisible = partyFrame && !partyFrame.classList.contains('hidden') && partyFrame.style.display !== 'none';
-      const memberRows = isPartyVisible ? Array.from(partyFrame.querySelectorAll('.pf-row')) : [];
-      const currentMemberNames = memberRows.map(r => {
-        return (r.querySelector('.pf-name b')?.textContent ||
-                r.querySelector('.pf-name')?.childNodes[0]?.textContent || '').trim().toLowerCase();
-      }).filter(Boolean);
+      // ──────────────────────────────────────────
+      // 第一階段：方案 A (原生隊伍等待，最長 60 秒)
+      // ──────────────────────────────────────────
+      const partyStatus = checkPartyReadiness();
 
-      // 檢查勾選的目標好友是否皆已在隊伍中 (排除本輪已逾時略過的好友)
-      const pendingFriends = targetFriends.filter(name => {
-        const clean = name.trim().toLowerCase();
-        return !currentMemberNames.includes(clean) && !friendInviteSkipped.has(clean);
-      });
+      if (timeSinceLobby < SCHEME_A_WAIT_MEMBERS_TIMEOUT_MS) { // 60 秒內
+        if (partyStatus.ready) {
+          // 全員在同頻道廣場就緒！給予 2.0 秒同步穩定期
+          if (!partyAllReadyAt) {
+            partyAllReadyAt = performance.now();
+          }
+          const readyElapsed = performance.now() - partyAllReadyAt;
+          if (readyElapsed < 2000) {
+            releaseAllMovementKeys();
+            const sec = Math.max(1, Math.ceil((2000 - readyElapsed) / 1000));
+            updateStatus(`✨ [隊長就緒] 全員已在廣場就緒！同步緩衝中 (${sec} 秒)...`);
+            return true;
+          }
+          // 全員就緒且緩衝結束！直接啟程進圖 (不退隊重組，最順暢！)
+          return false;
+        }
 
-      if (pendingFriends.length > 0) {
-        partyAllReadyAt = 0; // 尚有人未入隊，重置就緒計時器
-        leaderWaitReadySince = 0;
+        // 隊友尚未全員在同頻道廣場就緒：隊長原地待命
+        partyAllReadyAt = 0;
         releaseAllMovementKeys();
-
-        const nextFriend = pendingFriends[0];
-        const cleanFriend = nextFriend.trim().toLowerCase();
-
-        // 檢查該好友是否已逾時
-        const stat = friendInviteStats[cleanFriend] || { count: 0, firstSentAt: 0 };
-        const friendElapsed = stat.firstSentAt > 0 ? (performance.now() - stat.firstSentAt) : 0;
-
-        if (stat.count >= 3 || (stat.firstSentAt > 0 && friendElapsed > PARTY_LEADER_INVITE_TIMEOUT_MS)) {
-          // 好友已邀請 3 次或超過 20 秒未回應：標記略過！
-          console.warn(`[RO Helper] ⚠️ 隊友 [${nextFriend}] 超過 20 秒未接受邀請，本次略過等待！`);
-          showToast(`⚠️ 隊友 [${nextFriend}] 未回應，隊長略過出發！`, 2500);
-          friendInviteSkipped.add(cleanFriend);
-          return true; // 下一幀重新評估剩餘隊友或直接出發
-        }
-
-        // 每隔 4.5 秒向尚未入隊的下一位好友發送邀請 (防狂點與拉長等待隊友彈窗同意的緩衝)
-        if (performance.now() - lastInviteSentAt > 4500) {
-          stat.count = (stat.count || 0) + 1;
-          if (!stat.firstSentAt) stat.firstSentAt = performance.now();
-          friendInviteStats[cleanFriend] = stat;
-
-          updateStatus(`💌 [隊長發起組隊] 正在邀請隊友 [${nextFriend}] (第 ${stat.count}/3 次，超時將直接出發)...`);
-          showToast(`💌 正在邀請隊友 ${nextFriend} (${stat.count}/3)...`, 2500);
-          lastInviteSentAt = performance.now();
-          inviteFriend(nextFriend);
-        } else {
-          const remainSec = Math.max(1, Math.ceil((PARTY_LEADER_INVITE_TIMEOUT_MS - friendElapsed) / 1000));
-          updateStatus(`⏳ [隊長待命] 等待隊友 [${nextFriend}] 入隊 (防卡死倒數 ${remainSec}s)...`);
-        }
-        return true; // 暫緩進圖，等待隊友入隊
+        const remainSec = Math.max(1, Math.ceil((SCHEME_A_WAIT_MEMBERS_TIMEOUT_MS - timeSinceLobby) / 1000));
+        updateStatus(`⏳ [隊長待命] 方案A等待隊友就緒... ${partyStatus.reason} (剩餘 ${remainSec} 秒)`);
+        return true;
       }
 
-      // 目標隊友已全員入隊 (或未回應者已略過)！檢查全員在同頻道廣場就緒狀態
-      const partyStatus = checkPartyReadiness();
-      if (!partyStatus.ready) {
-        partyAllReadyAt = 0; // 尚未全員在廣場就緒，重置計時器
-        releaseAllMovementKeys();
+      // ──────────────────────────────────────────
+      // 第二階段：60 秒已過，仍有成員未在廣場就緒！
+      // ──────────────────────────────────────────
+      if (config.autoReParty) {
+        // 【使用者有勾選自動重組】➔ 執行方案 B (退隊 ➔ 等10秒 ➔ 發送邀請重組)
+        
+        // 步驟 B1：隊長退出舊隊伍
+        if (!partyLeaveTriggered) {
+          const partyFrame = document.getElementById('party-frame');
+          const isPartyVisible = partyFrame && !partyFrame.classList.contains('hidden') && partyFrame.style.display !== 'none';
+          const rows = partyFrame ? Array.from(partyFrame.querySelectorAll('.pf-row')) : [];
 
-        if (!leaderWaitReadySince) {
-          leaderWaitReadySince = performance.now();
+          partyLeaveTriggered = true;
+          partyLeftAt = performance.now();
+          lastInviteSentAt = 0;
+          friendInviteStats = {};
+          friendInviteSkipped.clear();
+
+          if (isPartyVisible && rows.length > 0) {
+            updateStatus('🚪 [隊長重組] 方案A逾時(60s)，隊長退出舊隊伍以執行重組...');
+            showToast('🚪 方案A逾時，退出舊隊伍準備重組...', 3000);
+            leaveParty();
+            return true;
+          }
         }
-        const readyElapsed = performance.now() - leaderWaitReadySince;
 
-        if (readyElapsed < PARTY_LEADER_WAIT_READY_TIMEOUT_MS) {
-          const remainSec = Math.max(1, Math.ceil((PARTY_LEADER_WAIT_READY_TIMEOUT_MS - readyElapsed) / 1000));
-          updateStatus(`⏳ [隊長待命] 隊員已入隊，等待隊友回到廣場... ${partyStatus.reason} (防卡死倒數 ${remainSec}s)`);
-          return true; // 隊友尚未在同頻道廣場就緒，隊長待命
-        } else {
-          // 🚨 隊友卡死或離線超過 35 秒！隊長觸發防卡死自救！
-          console.warn('[RO Helper] 🚨 隊友超過 35 秒未在廣場就緒！隊長退出隊伍以單人出發自救！');
-          updateStatus('🚪 [隊長防卡死] 隊員超時未就緒，隊長退出隊伍單人出發！');
-          showToast('⚠️ [隊長防卡死] 隊友超時未就緒，退出隊伍單人出發！', 3500);
-          leaveParty();
-          wasInParty = false;
-          leaderWaitReadySince = 0;
+        // 步驟 B2：隊長退出隊伍後等待 10 秒才開始重新組隊
+        const timeSinceLeave = performance.now() - partyLeftAt;
+        if (timeSinceLeave < REPARTY_LEADER_POST_LEAVE_COOLDOWN_MS) { // 10 秒
+          const sec = Math.max(1, Math.ceil((REPARTY_LEADER_POST_LEAVE_COOLDOWN_MS - timeSinceLeave) / 1000));
+          updateStatus(`⏳ [隊長待命] 退隊完成，等待伺服器清理狀態 (剩餘 ${sec} 秒後開始組隊)...`);
           return true;
         }
-      }
 
-      // 目標隊友全員在隊且就緒！給予 2.0 秒的同步穩定期，確保全體隊員的分流與數據連線完全穩定
-      leaderWaitReadySince = 0;
-      if (!partyAllReadyAt) {
-        partyAllReadyAt = performance.now();
-      }
-      const readyElapsed = performance.now() - partyAllReadyAt;
-      if (readyElapsed < 2000) {
-        releaseAllMovementKeys();
-        const sec = Math.max(1, Math.ceil((2000 - readyElapsed) / 1000));
-        updateStatus(`✨ [隊長就緒] 全員已在廣場就緒！同步緩衝中 (${sec} 秒)...`);
-        return true;
-      }
+        // 步驟 B3：10 秒過後，隊長開始向勾選好友發送組隊邀請
+        const partyFrame = document.getElementById('party-frame');
+        const isPartyVisible = partyFrame && !partyFrame.classList.contains('hidden') && partyFrame.style.display !== 'none';
+        const memberRows = isPartyVisible ? Array.from(partyFrame.querySelectorAll('.pf-row')) : [];
+        const currentMemberNames = memberRows.map(r => {
+          return (r.querySelector('.pf-name b')?.textContent ||
+                  r.querySelector('.pf-name')?.childNodes[0]?.textContent || '').trim().toLowerCase();
+        }).filter(Boolean);
 
-      // 全員入隊且同頻道廣場就緒、緩衝期結束！返回 false 允許 handleEnterMap() 前往開啟關卡
-      return false;
+        const pendingFriends = targetFriends.filter(name => {
+          const clean = name.trim().toLowerCase();
+          return !currentMemberNames.includes(clean) && !friendInviteSkipped.has(clean);
+        });
+
+        if (pendingFriends.length > 0) {
+          partyAllReadyAt = 0;
+          releaseAllMovementKeys();
+
+          const nextFriend = pendingFriends[0];
+          const cleanFriend = nextFriend.trim().toLowerCase();
+
+          const stat = friendInviteStats[cleanFriend] || { count: 0, firstSentAt: 0 };
+          const friendElapsed = stat.firstSentAt > 0 ? (performance.now() - stat.firstSentAt) : 0;
+
+          if (stat.count >= 3 || (stat.firstSentAt > 0 && friendElapsed > PARTY_LEADER_INVITE_TIMEOUT_MS)) {
+            console.warn(`[RO Helper] ⚠️ 隊友 [${nextFriend}] 超過 20 秒未接受邀請，本次略過等待！`);
+            showToast(`⚠️ 隊友 [${nextFriend}] 未回應，隊長略過出發！`, 2500);
+            friendInviteSkipped.add(cleanFriend);
+            return true;
+          }
+
+          // 每隔 4.5 秒向尚未入隊的好友發送邀請
+          if (performance.now() - lastInviteSentAt > 4500) {
+            stat.count = (stat.count || 0) + 1;
+            if (!stat.firstSentAt) stat.firstSentAt = performance.now();
+            friendInviteStats[cleanFriend] = stat;
+
+            updateStatus(`💌 [隊長發起組隊] 正在邀請隊友 [${nextFriend}] (第 ${stat.count}/3 次)...`);
+            showToast(`💌 正在邀請隊友 ${nextFriend} (${stat.count}/3)...`, 2500);
+            lastInviteSentAt = performance.now();
+            inviteFriend(nextFriend);
+          } else {
+            const remainSec = Math.max(1, Math.ceil((PARTY_LEADER_INVITE_TIMEOUT_MS - friendElapsed) / 1000));
+            updateStatus(`⏳ [隊長待命] 等待隊友 [${nextFriend}] 入隊 (防卡死倒數 ${remainSec}s)...`);
+          }
+          return true;
+        }
+
+        // 目標好友已全員入隊 (或未回應者已略過)！檢查全員在同頻道廣場就緒
+        const postRePartyStatus = checkPartyReadiness();
+        if (!postRePartyStatus.ready) {
+          partyAllReadyAt = 0;
+          releaseAllMovementKeys();
+          updateStatus(`⏳ [隊長待命] 隊員已入隊，等待隊友回到廣場... ${postRePartyStatus.reason}`);
+          return true;
+        }
+
+        // 全員就緒！給予 2.0 秒穩定期
+        if (!partyAllReadyAt) {
+          partyAllReadyAt = performance.now();
+        }
+        const readyElapsed = performance.now() - partyAllReadyAt;
+        if (readyElapsed < 2000) {
+          releaseAllMovementKeys();
+          const sec = Math.max(1, Math.ceil((2000 - readyElapsed) / 1000));
+          updateStatus(`✨ [隊長就緒] 全員已在廣場就緒！同步緩衝中 (${sec} 秒)...`);
+          return true;
+        }
+
+        // 全員入隊且就緒，出發進圖！
+        return false;
+
+      } else {
+        // 【使用者未勾選自動重組】➔ 繼續在原生隊伍等待，直到 120 秒後自行進圖
+        if (timeSinceLobby < SCHEME_A_NO_REPARTY_SOLO_TIMEOUT_MS) { // 120 秒內
+          const remainSec = Math.max(1, Math.ceil((SCHEME_A_NO_REPARTY_SOLO_TIMEOUT_MS - timeSinceLobby) / 1000));
+          updateStatus(`⏳ [隊長待命] 未勾選重組，持續等待隊友回到原生隊伍... (自救倒數 ${remainSec} 秒)`);
+          return true;
+        } else {
+          // 滿 120 秒隊友仍未就緒：隊長自行進入副本自救！
+          console.warn('[RO Helper] 🚨 隊長等待隊友超過 120 秒未就緒！自行進入副本！');
+          updateStatus('🚶 [隊長超時] 等待隊友超過 120 秒未就緒，隊長自行出發進入副本！');
+          showToast('⚠️ 等待隊友超時 120 秒，自行進入副本！', 3500);
+          wasInParty = false;
+          return false; // 允許 handleEnterMap() 前往 NPC 出發
+        }
+      }
     }
 
     return false;
   }
 
-  /**
-   * 大廳出發前往怪獸地圖或燈籠節活動
-   */
   function handleEnterMap() {
     if (!config.autoEnterMap) return;
     // 嚴格限制：僅在遊戲大廳狀態執行出發邏輯，若尚未進入大廳（如標題/選角/連線中）絕對不干涉
@@ -3152,13 +3255,14 @@
         releaseAllMovementKeys();
         if (!leaderWaitReadySince) leaderWaitReadySince = performance.now();
         const elapsed = performance.now() - leaderWaitReadySince;
-        if (elapsed < PARTY_LEADER_WAIT_READY_TIMEOUT_MS) {
-          const sec = Math.max(1, Math.ceil((PARTY_LEADER_WAIT_READY_TIMEOUT_MS - elapsed) / 1000));
+        const waitLimit = config.autoReParty ? SCHEME_A_WAIT_MEMBERS_TIMEOUT_MS : SCHEME_A_NO_REPARTY_SOLO_TIMEOUT_MS;
+        if (elapsed < waitLimit) {
+          const sec = Math.max(1, Math.ceil((waitLimit - elapsed) / 1000));
           updateStatus(`⏳ [隊長待命] 等待隊友回到廣場... ${partyStatus.reason} (防卡死倒數 ${sec}s)`);
           return;
         } else {
-          // 隊友超時 35 秒未就緒，自動退隊單人出發自救
-          console.warn('[RO Helper] 🚨 隊友超過 35 秒未在廣場就緒！退出隊伍單人出發防卡死！');
+          // 隊友超時未就緒，自動退隊單人出發自救
+          console.warn('[RO Helper] 🚨 隊友超過時限未在廣場就緒！退出隊伍單人出發防卡死！');
           updateStatus('🚪 [隊長防卡死] 隊員超時未就緒，退出隊伍單人出發！');
           showToast('⚠️ [隊長防卡死] 隊友超時未就緒，退出隊伍單人出發！', 3500);
           leaveParty();
@@ -3331,7 +3435,7 @@
       // 3.1.5 檢查是否為退出隊伍確認視窗 (¿Salir del grupo?)
       const isLeaveConfirmDialog = (dialogFullText.includes('salir del grupo') || dialogFullText.includes('¿salir') || (dialogFullText.includes('grupo') && dialogFullText.includes('salir'))) &&
                                    !dialogFullText.includes('quiere salir con el grupo');
-      if (isLeaveConfirmDialog && config.autoReParty) {
+      if (isLeaveConfirmDialog && (config.autoReParty || isLeavingParty || config.partyRole === 'member')) {
         const confirmBtn = dialog.querySelector('#npc-options button.primary') ||
                            optionsBtns.find(b => (b.textContent || '').toLowerCase().includes('salir'));
         if (confirmBtn) {

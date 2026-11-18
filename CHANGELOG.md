@@ -5,7 +5,7 @@
 <div align="center">
 
 [![Buy Me a Coffee](https://img.shields.io/badge/Ko--fi-請兔子喝杯咖啡-ff5e5b?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/martianrabbit)
-[![Version](https://img.shields.io/badge/Version-2.0.4--1-blue.svg?style=for-the-badge)](https://github.com/hijacker4163/ro-survivors-helper)
+[![Version](https://img.shields.io/badge/Version-2.0.4--2-blue.svg?style=for-the-badge)](https://github.com/hijacker4163/ro-survivors-helper)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 
 **🐰 位於南半球從火星下來的兔子程式員 (Martian Rabbit) 精心打造 🚀**  
@@ -15,6 +15,32 @@
 </div>
 
 ---
+
+## 🚀 v2.0.4-2 (2026-11-18) - 兩階段階梯式組隊守護架構 (方案A 60s原生等待 / 方案B 退隊等10s重組 / 隊長移交偵測與跟隨退隊 / 120s單人進圖自救)
+
+### 🌟 核心更新與突破
+- **🏛️ 兩階段階梯式組隊守護架構 (Two-Phase Party Scheme)**：
+  - **第一階段（方案 A 原生隊伍等待，最長 60 秒）**：
+    - 返回大廳後，隊長端原地待命並嚴格守護，**絕對不准誤判降級為單人模式**，最長等待 60 秒（`SCHEME_A_WAIT_MEMBERS_TIMEOUT_MS = 60s`）。
+    - 只要 60 秒內全員在同頻道廣場就緒，經 2 秒同步穩定期後直接啟程進圖，**絕不破壞既有隊伍，流暢銜接下一場**！
+  - **第二階段（60 秒後仍有成員未就緒之分支判定）**：
+    - **若有勾選【自動重組】(方案 B)**：
+      1. 隊長退出舊隊伍。
+      2. 隊長退出隊伍後**強制等待 10 秒**（`REPARTY_LEADER_POST_LEAVE_COOLDOWN_MS = 10s`），給予伺服器充分清理隊伍狀態緩衝。
+      3. 10 秒冷卻結束後，隊長打開好友清單依序發送組隊邀請，全員就緒後出發。
+    - **若未勾選【自動重組】**：
+      - 隊長不退隊，繼續在原生隊伍中等待隊友，**最長等待滿 120 秒**（`SCHEME_A_NO_REPARTY_SOLO_TIMEOUT_MS = 120s`）。
+      - 若 120 秒後隊友仍未出現，隊長觸發防卡死自救機制，**自行進入副本（單人出發）**！
+- **👑 隊員端「隊長移交 / 退隊離開」多重特徵深思偵測與跟隨退隊**：
+  - 徹底解決遊戲底層在隊長退隊時會「自動將隊長移交給下一位隊員」的陷阱：
+    1. **原隊長移出成員清單**：動態記錄上一局原隊長名稱，若隊長名稱不再存在於隊伍中，判定原隊長已退隊。
+    2. **隊員被動變隊長**：身分設定為隊員，但自己頭像突然頂著 `.pf-lead` 隊長標籤，判定原隊長已離隊。
+    3. **隊伍僅剩自己一人**：隊伍成員數 `<= 1`，判定原隊長已離隊。
+  - 符合條件時，隊員立即執行退隊，乾淨回到無隊伍狀態待命，**完美接收隊長 10 秒後發來的新組隊邀請**！
+- **⏳ 隊伍同步安全期與逾時參數全面放寬**：
+  - 大廳安全同步期由 5 秒放寬至 **15 秒**。
+  - 隊員在隊等待隊長出發逾時放寬至 **130 秒**，無隊伍等邀請放寬至 **90 秒**，避免隊員過早單人搶跑。
+
 
 ## 🚀 v2.0.4-1 (2026-11-18) - 圓周風箏走位半徑擴增至 800px、UI 調整範圍放寬 (100~1000px) 與狹窄地形自動避障優化
 
