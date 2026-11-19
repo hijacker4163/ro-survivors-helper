@@ -5,7 +5,7 @@
 <div align="center">
 
 [![Buy Me a Coffee](https://img.shields.io/badge/Ko--fi-請兔子喝杯咖啡-ff5e5b?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/martianrabbit)
-[![Version](https://img.shields.io/badge/Version-2.0.4-blue.svg?style=for-the-badge)](https://github.com/hijacker4163/ro-survivors-helper)
+[![Version](https://img.shields.io/badge/Version-2.0.5-blue.svg?style=for-the-badge)](https://github.com/hijacker4163/ro-survivors-helper)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 
 **🐰 位於南半球從火星下來的兔子程式員 (Martian Rabbit) 精心打造 🚀**  
@@ -13,6 +13,40 @@
 👉 **[點此贊助請喝咖啡 (Ko-fi)](https://ko-fi.com/martianrabbit)**
 
 </div>
+
+---
+
+## 🚀 v2.0.5 (2026-11-19) - 雙版本支援 (國際原版 / 台版 HANS)、全方位反作弊金鐘罩升級與蜜罐陷阱拆解
+
+### 🌟 核心更新與突破
+
+#### 1. 🌐 雙伺服器環境架構自動適配 (Multi-Server Adapter: Official vs HANS TW)
+- **智慧網域與版本動態辨識**：
+  - 程式啟動時自動檢測當前運作站點（`ro-survivors.com` 國際原版 vs `ro.hans-webgametw.com` 台版 HANS），動態切換底層配置。
+  - 浮動面板頂部狀態新增伺服器環境標籤並獨立換行顯示，清楚掌握當前適配模式。
+- **台版 17 大關卡地圖數據全適配**：
+  - 深度逆向適配台版特有之關卡資料庫（包含「初心者試煉」、「吉芬魔法祭 (初級~地獄)」、「艾爾帕蘭 (難度1~4)」、「奧丁神殿 (難度1~4)」等全 17 關）。
+  - 對應台版 NPC 互動詞彙，追加支援與「船長」對話觸發，確保副本出發流程完全無縫。
+- **伺服器專屬 NPC 尋路防呆與介面優化**：
+  - 針對台版無獨立活動 NPC 之特點（洛陽在台版為第 12 關常規遠征關卡），自動隱藏不存在之 NPC 功能按鈕，防止空跑或卡死。
+
+#### 2. 🛡️ 全方位反作弊與反偵測金鐘罩全面升級 (Stealth & Anti-Detection Shield Upgrade)
+- **封印 7 天小黑屋本地標記 (`ro_gfx_cal` & `Uv` Cheat Flag)**：
+  - 徹底排查進入戰鬥瞬間立即召喚 30 隻 BOSS 圍毆秒殺的懲罰機制（`springTrap` / `Dm(this)`）。
+  - 遊戲反作弊機制觸發後會將 `ro_gfx_cal`（7 天後時間戳）寫入 `localStorage`，導致後續進入戰鬥將 `Uv` 設為 `true` 觸發秒殺陷阱。
+  - 透過代理 `Storage.prototype.getItem` 與 `setItem`，全面攔截並阻斷 `ro_gfx_cal`，徹底化解小黑屋懲罰。
+- **免侵入式戰鬥引擎實例代理攔截器 (WeakRef Hook & springTrap Prototype Disarm)**：
+  - 雙重防護架構：在 `WeakRef` 建構子接收戰鬥引擎實例瞬間先發制人，在 `Dm(this)` 執行前徹底解除 `springTrap` 原型鏈陷阱，杜絕秒殺怪物懲罰；並在 `WeakRef.prototype.deref` 循環捕獲運行中實例提供動態守護。
+- **選牌反作弊蜜罐安全識別 (Honeypot Decoy Detection)**：
+  - 精確識別遊戲反作弊注入之偽造 `.pk-slot` 蜜罐（特徵為標註 `aria-hidden="true"` 且帶有 `clipPath="inset(50%)"`）。
+  - 自動選卡時嚴格剔除蜜罐元素，杜絕誤觸 `t_()` ➔ `Aq()` ➔ `In()` 報警路徑。
+- **原生事件過濾與簽名偽裝**：
+  - 攔截 HP 監聽器過濾所有腳本模擬之非原生事件（`!event.isTrusted`），防止作弊按鍵/點擊計數超標（`Ph/qh >= 5, ++ZS >= 10, ++Qh >= 10`）。
+  - 原生函數簽名偽裝（`Function.prototype.toString`），完美通過 `Rh()` 與 `nu()` 的 `[native code]` 檢測。
+
+#### 3. 📊 戰績持久化統計與進度判讀優化
+- **戰績跨重整持久化儲存**：累積記錄進圖、通關、失敗與中斷次數，狀態生命週期精準鎖定，杜絕重複統計。
+- **大廳逾時自動刷新自救**：處於啟動狀態且在大廳超過 4 分鐘未進圖或動作時，自動執行重整自救。
 
 ---
 

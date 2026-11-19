@@ -1,10 +1,12 @@
-// RO Survivors 主控台即貼即用腳本 v2.0.4
+// RO Survivors 控制中心即貼即用腳本 v2.0.5
 // @author       Martian Rabbit
 // @homepage     https://github.com/hijacker4163/ro-survivors-helper
+// @supportURL   https://ko-fi.com/martianrabbit
+
 (function () {
   'use strict';
 
-  const SCRIPT_VERSION = '2.0.4';
+  const SCRIPT_VERSION = '2.0.5';
 
   let activeBattleGameInstance = null;
 
@@ -13,13 +15,56 @@
   // ==========================================
   // 0.0 全方位反作弊與反偵測金鐘罩 (Stealth & Anti-Detection Shield)
   // 針對遊戲 main.js 內部反作弊與遙測機制進行全方位反制：
-  // 1. 攔截 HP 監聽器，過濾所有腳本模擬之非原生事件 (!event.isTrusted)，防止作弊按鍵/點擊計數超標 (Ph/qh >= 5)
-  // 2. 原生函數簽名偽裝 (Function.prototype.toString)，完美通過 Rh() 的 [native code] 檢測
+  // 1. 攔截 HP 監聽器，過濾所有腳本模擬之非原生事件 (!event.isTrusted)，防止作弊按鍵/點擊計數超標 (Ph/qh >= 5, ++ZS >= 10, ++Qh >= 10)
+  // 2. 原生函數簽名偽裝 (Function.prototype.toString)，完美通過 Rh() 與 nu() 的 [native code] 檢測
   // 3. 阻斷客戶端向伺服器舉報管道 (封鎖 POST /env)，舉報封包絕不出瀏覽器
   // 4. 結算遙測數據清洗 (Sanitize pt on POST /op)，將選卡時間偽造為真實人類常態分佈 (c0 永遠為 0)
+  // 5. 封印 7 天小黑屋本地標記 (ro_gfx_cal)：代理 Storage.prototype，阻斷 Uv=true，杜絕進入戰鬥 Dm() 秒出 30 隻 BOSS (springTrap)
+  // 6. 戰鬥引擎實例免侵入式代理攔截器 (WeakRef 雙重防禦)，先發制人瓦解 springTrap 原型鏈
+  // 7. 清理黑名單特徵與本地存儲 (Clean Blacklisted Globals & Storage)
+  // 8. 蜜罐元素安全識別 (Honeypot Decoy Detection)，杜絕誤觸 t_() ➔ Aq() ➔ In()
   // ==========================================
+  function isDecoyElement(el) {
+    if (!el || !(el instanceof Element)) return false;
+    try {
+      // 遊戲反作弊蜜罐為克隆的 .pk-slot，特徵為標註 aria-hidden="true" 且帶有 clipPath="inset(50%)"
+      if (el.getAttribute('aria-hidden') === 'true' || el.closest('[aria-hidden="true"]')) return true;
+      if (el.style && el.style.clipPath && el.style.clipPath.includes('inset')) return true;
+      const slot = el.closest('.pk-slot');
+      if (slot) {
+        if (slot.getAttribute('aria-hidden') === 'true') return true;
+        if (slot.style && slot.style.clipPath && slot.style.clipPath.includes('inset')) return true;
+      }
+    } catch (e) {}
+    return false;
+  }
+
   (function initAntiDetectionShield() {
     try {
+      // 🛡️ 盾牌 0：封印 7 天小黑屋本地標記 (Defuse ro_gfx_cal & Uv Cheat Flag)
+      // 遊戲反作弊一旦觸發 In() 便寫入 localStorage.setItem("ro_gfx_cal", Date.now() + 7天)。
+      // 遊戲啟動 Mq() 讀取若大於 Date.now() 則設置 Uv = true，進入副本戰鬥建構子最後一行 Dm(this) 立即召喚 30 隻 BOSS (springTrap)！
+      const origGetItem = Storage.prototype.getItem;
+      const origSetItem = Storage.prototype.setItem;
+      try {
+        localStorage.removeItem('ro_gfx_cal');
+      } catch (e) {}
+
+      Storage.prototype.getItem = function (key) {
+        if (key === 'ro_gfx_cal') {
+          return null; // 永遠回傳 null，阻止遊戲 Mq() 將 Uv 設為 true
+        }
+        return origGetItem.apply(this, arguments);
+      };
+
+      Storage.prototype.setItem = function (key, value) {
+        if (key === 'ro_gfx_cal') {
+          console.warn('[RO Shield] 🛑 成功攔截並封鎖遊戲寫入 7 天小黑屋作弊標記 (ro_gfx_cal)！');
+          return;
+        }
+        return origSetItem.apply(this, arguments);
+      };
+
       // 🛡️ 盾牌 1：封印 HP 監聽器，隔離非信任事件 (isTrusted Shield)
       const MONITORED_ANTI_CHEAT_TYPES = new Set(['keydown', 'keyup', 'pointerdown', 'pointerup', 'mousedown', 'click']);
       const origEventTargetAddEventListener = EventTarget.prototype.addEventListener;
@@ -44,9 +89,10 @@
       };
       window.addEventListener = EventTarget.prototype.addEventListener;
 
-      // 🛡️ 盾牌 2：原生函數簽名偽裝 (Native Code Camouflage for Rh & Security Audits)
+      // 🛡️ 盾牌 2：原生函數簽名偽裝 (Native Code Camouflage for Rh & nu Security Audits)
       const origFetch = window.fetch;
       const origFnToString = Function.prototype.toString;
+      const origWeakRef = window.WeakRef;
       const SPOOFED_NATIVE_NAMES = new Map([
         [window.requestAnimationFrame, 'requestAnimationFrame'],
         [window.cancelAnimationFrame, 'cancelAnimationFrame'],
@@ -55,13 +101,18 @@
         [EventTarget.prototype.addEventListener, 'addEventListener'],
         [window.addEventListener, 'addEventListener'],
         [origEventTargetAddEventListener, 'addEventListener'],
+        [Storage.prototype.getItem, 'getItem'],
+        [Storage.prototype.setItem, 'setItem'],
+        [origGetItem, 'getItem'],
+        [origSetItem, 'setItem'],
         [origFetch, 'fetch'],
         [Function.prototype.toString, 'toString'],
+        [origWeakRef, 'WeakRef'],
         [window.WeakRef ? window.WeakRef.prototype.deref : null, 'deref']
       ].filter(([fn]) => typeof fn === 'function'));
 
       Function.prototype.toString = function () {
-        if (SPOOFED_NATIVE_NAMES.has(this) || this === window.fetch || this === Function.prototype.toString) {
+        if (SPOOFED_NATIVE_NAMES.has(this) || this === window.fetch || this === Function.prototype.toString || this === Storage.prototype.getItem || this === Storage.prototype.setItem) {
           const fnName = SPOOFED_NATIVE_NAMES.get(this) || this.name || 'requestAnimationFrame';
           return `function ${fnName}() { [native code] }`;
         }
@@ -111,47 +162,61 @@
         return origFetch.apply(this, arguments);
       };
 
-      // 🛡️ 盾牌 5：戰鬥引擎實例免侵入式代理攔截器 (Zero-Overhead Battle Instance Hook)
-      // 僅輕量包裝 WeakRef.prototype.deref 精準捕獲 wn (D) 戰鬥實例，保持 window.WeakRef 建構子 100% 原生無痕，完美通過所有原生簽名審查
-      try {
-        if (typeof window.WeakRef === 'function' && window.WeakRef.prototype && typeof window.WeakRef.prototype.deref === 'function') {
-          const origDeref = window.WeakRef.prototype.deref;
-          window.WeakRef.prototype.deref = function () {
-            const target = origDeref.apply(this, arguments);
-            if (target && typeof target === 'object' && Array.isArray(target.pickups) && typeof target.stageId === 'string') {
-              activeBattleGameInstance = target;
-              window.__roBattleGame = target;
-
-              // 🛡️ 盾牌 6：原型鏈惡意陷阱瓦解 (Defang springTrap & Trap Timer Disarm)
-              // 徹底封殺遊戲反作弊 springTrap() 怪物召喚與即死判定，並鎖定 trapAt/trapShotAt 為 -1
+      // 🛡️ 盾牌 5 & 6：戰鬥引擎實例免侵入式代理攔截器 (WeakRef Hook & springTrap Disarm)
+      // 雙重防護：1. 在 WeakRef 建構子傳入實例瞬間，趕在 Dm(this) 前先發制人解除陷阱
+      //           2. 在 WeakRef.prototype.deref 循環捕獲運行中實例
+      function disarmBattleTrap(target) {
+        if (!target || typeof target !== 'object') return;
+        if (Array.isArray(target.pickups) && typeof target.stageId === 'string') {
+          activeBattleGameInstance = target;
+          window.__roBattleGame = target;
+          try {
+            const proto = Object.getPrototypeOf(target);
+            if (proto && typeof proto.springTrap === 'function' && !proto.__trapShielded) {
+              proto.__trapShielded = true;
+              proto.springTrap = function () {
+                console.warn('[RO Shield] 🛑 成功攔截並瓦解遊戲反作弊 springTrap()！惡意怪物召喚與即死懲罰已徹底失效！');
+                this.trapAt = -1;
+                this.trapShotAt = -1;
+              };
               try {
-                const proto = Object.getPrototypeOf(target);
-                if (proto && typeof proto.springTrap === 'function' && !proto.__trapShielded) {
-                  proto.__trapShielded = true;
-                  proto.springTrap = function () {
-                    console.warn('[RO Shield] 🛑 成功攔截並瓦解遊戲反作弊 springTrap()！惡意怪物召喚與即死懲罰已徹底失效！');
-                    this.trapAt = -1;
-                    this.trapShotAt = -1;
-                  };
-                  try {
-                    Object.defineProperty(proto, 'trapAt', {
-                      get: () => -1,
-                      set: () => {},
-                      configurable: true
-                    });
-                    Object.defineProperty(proto, 'trapShotAt', {
-                      get: () => -1,
-                      set: () => {},
-                      configurable: true
-                    });
-                  } catch (e) {}
-                }
-                if (typeof target.trapAt === 'number') target.trapAt = -1;
-                if (typeof target.trapShotAt === 'number') target.trapShotAt = -1;
+                Object.defineProperty(proto, 'trapAt', {
+                  get: () => -1,
+                  set: () => {},
+                  configurable: true
+                });
+                Object.defineProperty(proto, 'trapShotAt', {
+                  get: () => -1,
+                  set: () => {},
+                  configurable: true
+                });
               } catch (e) {}
             }
-            return target;
+            if (typeof target.trapAt === 'number') target.trapAt = -1;
+            if (typeof target.trapShotAt === 'number') target.trapShotAt = -1;
+          } catch (e) {}
+        }
+      }
+
+      try {
+        if (typeof window.WeakRef === 'function') {
+          const rawWeakRef = window.WeakRef;
+          const proxiedWeakRef = function (target) {
+            disarmBattleTrap(target);
+            return new rawWeakRef(target);
           };
+          proxiedWeakRef.prototype = rawWeakRef.prototype;
+          window.WeakRef = proxiedWeakRef;
+          SPOOFED_NATIVE_NAMES.set(proxiedWeakRef, 'WeakRef');
+
+          if (rawWeakRef.prototype && typeof rawWeakRef.prototype.deref === 'function') {
+            const origDeref = rawWeakRef.prototype.deref;
+            rawWeakRef.prototype.deref = function () {
+              const target = origDeref.apply(this, arguments);
+              disarmBattleTrap(target);
+              return target;
+            };
+          }
         }
       } catch (hookErr) {
         console.warn("[RO Shield] 戰鬥引擎實例代理安裝異常:", hookErr);
@@ -165,19 +230,28 @@
         delete globalThis.ROBot;
         delete window.__RO_COPILOT_INSTALLED__;
         delete globalThis.__RO_COPILOT_INSTALLED__;
-        const BLACKLIST_KEYS = ['ro_survivors_bot_cfg_v10', 'ro_copilot_license_key', 'ro_copilot_device_id'];
+        delete window.__ROS_HELPER_BRIDGE__;
+        delete globalThis.__ROS_HELPER_BRIDGE__;
+        const BLACKLIST_KEYS = [
+          'ro_gfx_cal',
+          'ro_survivors_bot_cfg_v10',
+          'ro_copilot_license_key',
+          'ro_copilot_device_id',
+          'ro_copilot_v2_config',
+          'ro_copilot_login_user'
+        ];
         BLACKLIST_KEYS.forEach(k => {
           try { localStorage.removeItem(k); } catch (e) {}
         });
         for (let i = localStorage.length - 1; i >= 0; i--) {
           const k = localStorage.key(i);
-          if (k && k.startsWith('robot.')) {
+          if (k && (k.startsWith('robot.') || k === 'ro_gfx_cal')) {
             try { localStorage.removeItem(k); } catch (e) {}
           }
         }
       } catch (e) {}
 
-            console.log('[RO Shield] 🛡️ 全方位反作弊防護金鐘罩已成功啟動！');
+      console.log('[RO Shield] 🛡️ 全方位反作弊防護金鐘罩已成功啟動！');
     } catch (e) {
       console.warn('[RO Shield] 初始化金鐘罩例外:', e);
     }
@@ -274,7 +348,7 @@
       };
     `], { type: 'application/javascript' })));
   } catch (e) {
-    console.warn('[RO Helper] 初始化 Background Worker 失敗:', e);
+    console.warn('[RO Controller] 初始化 Background Worker 失敗:', e);
   }
 
   const realRAF = window.requestAnimationFrame.bind(window);
@@ -297,7 +371,7 @@
     try {
       cb(ts);
     } catch (err) {
-      console.error('[RO Helper rAF error]:', err);
+      console.error('[RO Controller rAF error]:', err);
     }
   };
 
@@ -890,7 +964,7 @@
         }
       });
     } catch (e) {
-      console.warn('[RO Helper] 圖書館 Wiki 道具爬取例外:', e);
+      console.warn('[RO Controller] 圖書館 Wiki 道具爬取例外:', e);
     }
   }
 
@@ -900,12 +974,12 @@
   // ==========================================
   const I18N = {
     zh: {
-      title: 'RO Survivors 輔助',
+      title: 'RO Survivors 控制中心',
       status_title: '狀態:',
-      status_running: '助手運行中...',
-      status_standby: '助手待命中 (未啟動)',
-      btn_start: '▶️ 啟動助手',
-      btn_stop: '🛑 停止助手',
+      status_running: '控制中心運作中...',
+      status_standby: '待命中 (未啟動)',
+      btn_start: '▶️ 啟動運作',
+      btn_stop: '🛑 停止運作',
       current_job: '🎭 當前職業',
       target_stage: '🗺️ 目標挑戰關卡',
       levelup_mode: '⚡ 升級方式 (出發設定)',
@@ -919,23 +993,24 @@
       background_mode: '🔄 允許縮小與切頁 (背景運行)',
       background_mode_tip: '使用 Web Worker 與 rAF 接管機制，在最小化視窗或切換到其他分頁時依然保持 60 FPS 持續推進遊戲與戰鬥',
       auto_login: '🔑 自動登入與選角色 (斷線/重載)',
-      auto_login_tip: '當維護重啟、斷線、閒置超時或重新整理回到大廳畫面時，自動點擊開始、選擇指定角色槽位並進入遊戲，進入大廳後自動恢復助手運行',
+      auto_login_tip: '當維護重啟、斷線、閒置超時或重新整理回到大廳畫面時，自動點擊開始、選擇指定角色槽位並進入遊戲，進入大廳後自動恢復運作',
       char_slot_label: '👤 角色槽位編號 (1~15)',
       char_slot_tip: '從左上第一排第一格為1，往右為2，到底後換至第二排第一列，以此類推 (1~15)',
       auto_reload_lobby: '🔄 大廳卡死重整 (4分鐘)',
-      auto_reload_lobby_tip: '當助手啟動且卡在普隆德拉大廳超過 4 分鐘未動作時，自動重整整個網頁 (F5) 防卡死。開啟時請注意若伺服器人數過多可能需要排隊。',
-      confirm_auto_reload_lobby: '⚠️ 警告提示：\n開啟「大廳超時 4 分鐘自動重整」後，若助手在普隆德拉大廳卡住或超過 4 分鐘無動作，將會自動重新整理整個網頁（F5）。\n\n請特別注意：若遇伺服器人數過多或熱門時段，重新進入遊戲可能需要「排隊」重新進場！\n\n是否確定要開啟此功能？',
+      auto_reload_lobby_tip: '當控制中心啟動且卡在普隆德拉大廳超過 4 分鐘未動作時，自動重整整個網頁 (F5) 防卡死。開啟時請注意若伺服器人數過多可能需要排隊。',
+      confirm_auto_reload_lobby: '⚠️ 警告提示：\n開啟「大廳超時 4 分鐘自動重整」後，若在普隆德拉大廳卡住或超過 4 分鐘無動作，將會自動重新整理整個網頁（F5）。\n\n請特別注意：若遇伺服器人數過多或熱門時段，重新進入遊戲可能需要「排隊」重新進場！\n\n是否確定要開啟此功能？',
       auto_enter_map: '⚔️ 自動進入地圖',
-      auto_reparty: '👥 場次結束自動退隊重組 (Auto Re-Party)',
+      party_feature: '👥 組隊功能 (求穩模式)',
+      party_feature_tip: '開啟組隊功能。隊長模式自動邀請勾選好友並帶隊進場；隊員模式原地待命自動同意入隊與出發確認。場次結束全員自動退隊以利重新組隊。',
       party_role: '組隊定位：',
-      role_leader: '👑 隊長 (自動組勾選隊友)',
-      role_member: '🤝 隊員 (待命自動入隊出發)',
+      role_leader: '👑 隊長 (邀請名單成員 & 帶隊進場)',
+      role_member: '🤝 隊員 (自動同意邀請 & 等候進場)',
+      member_info_desc: '🤝 隊員模式：在大廳原地待命，自動同意隊長邀請與出發確認。場次結束後自動退隊等待下一輪邀請。',
       target_teammates: '目標隊友 (勾選自動邀請):',
       refresh_friends: '🔄 刷新好友',
       add_friend_placeholder: '手動新增好友ID...',
       add_friend_btn: '新增',
-      auto_party_check: '🤝 自動同意邀請/出發 (跟車/隊員必備)',
-      btn_reset_solo: '🔄 立即解除組隊回歸單人 (Reset Solo)',
+      btn_reset_solo: '🔄 一鍵重設單人模式 (清空組隊狀態)',
       tip_reset_solo: '若組隊結束後想立即以單人模式進行遊戲，點此可強制退出隊伍、重設單人狀態並開啟自動進入地圖，徹底防止卡死',
       auto_pick_card: '🃏 自動升級選卡',
       auto_reroll: '🎲 智慧重刷 (先單張後全部)',
@@ -1005,12 +1080,12 @@
       skills_tip: '💡 提示：點擊按鈕可即時切換「專注 (×3 出現率)」、「放逐 (移出抽卡池)」或「正常」狀態。'
     },
     en: {
-      title: 'RO Survivors Helper',
+      title: 'RO Survivors Controller',
       status_title: 'Status:',
-      status_running: 'Helper Running...',
-      status_standby: 'Helper Standby (Idle)',
-      btn_start: '▶️ Start Helper',
-      btn_stop: '🛑 Stop Helper',
+      status_running: 'Controller Running...',
+      status_standby: 'Controller Standby (Idle)',
+      btn_start: '▶️ Start Controller',
+      btn_stop: '🛑 Stop Controller',
       current_job: '🎭 Current Class',
       target_stage: '🗺️ Target Stage',
       levelup_mode: '⚡ Level-up Mode',
@@ -1028,18 +1103,19 @@
       char_slot_label: '👤 Character Slot (1~15)',
       char_slot_tip: 'Counted from top-left as 1, moving rightwards as 2, wrapping to next row (1~15)',
       auto_reload_lobby: '🔄 Lobby Idle Reload (4 mins)',
-      auto_reload_lobby_tip: 'Automatically refreshes the page (F5) if stuck in the lobby for over 4 minutes while helper is active. Note: may require queuing during peak hours.',
-      confirm_auto_reload_lobby: '⚠️ Warning:\nWhen enabled, the page will automatically refresh (F5) if idle or stuck in the lobby for over 4 minutes while helper is running.\n\nPlease note: If the server is crowded during peak hours, you may need to wait in a queue to re-enter.\n\nAre you sure you want to enable this feature?',
+      auto_reload_lobby_tip: 'Automatically refreshes the page (F5) if stuck in the lobby for over 4 minutes while controller is active. Note: may require queuing during peak hours.',
+      confirm_auto_reload_lobby: '⚠️ Warning:\nWhen enabled, the page will automatically refresh (F5) if idle or stuck in the lobby for over 4 minutes while controller is running.\n\nPlease note: If the server is crowded during peak hours, you may need to wait in a queue to re-enter.\n\nAre you sure you want to enable this feature?',
       auto_enter_map: '⚔️ Auto Enter Map',
-      auto_reparty: '👥 Auto Re-Party After Match',
+      party_feature: '👥 Party Automation',
+      party_feature_tip: 'Enable party automation. Leader automatically invites checked friends and leads; Member stands by, auto-accepts invites and follows. All members cleanly leave party after match.',
       party_role: 'Party Role:',
-      role_leader: '👑 Leader (Auto-invite checked friends)',
-      role_member: '🤝 Member (Auto-accept & follow leader)',
+      role_leader: '👑 Leader (Invites & Leads)',
+      role_member: '🤝 Member (Auto Accepts & Follows)',
+      member_info_desc: '🤝 Member Mode: Stands by in lobby, automatically accepts party invites and ready checks. Cleanly leaves party after run to await next invite.',
       target_teammates: 'Target Friends (Auto-invite):',
       refresh_friends: '🔄 Refresh Friends',
       add_friend_placeholder: 'Add friend by ID...',
       add_friend_btn: 'Add',
-      auto_party_check: '🤝 Auto Ready Check (Auto accept & go)',
       btn_reset_solo: '🔄 Reset to Solo Mode',
       tip_reset_solo: 'Force leave any party and switch back to solo mode with auto-enter map enabled to prevent any lobby lockup',
       auto_pick_card: '🃏 Auto Pick Cards',
@@ -1302,18 +1378,44 @@
   };
 
   // ==========================================
-  // 2. 關卡與活動配置清單 (Stages & Events Config)
+  // 2. 伺服器環境與關卡配置清單 (Server Adapter & Stages Config)
+  // 自動偵測: 國際原版 (ro-survivors.com) vs 台版 (ro.hans-webgametw.com)
   // ==========================================
-  const STAGES_CONFIG = [
-    { id: 'auto', name: '🔄 自動 (預設最新關卡)', index: -1 },
-    { id: 'prontera', name: '1. 普隆德拉原野 (Lv 1–8)', index: 0 },
-    { id: 'sewer', name: '2. 普隆德拉下水道 (Lv 9–12)', index: 1 },
-    { id: 'sunken', name: '3. 沉船 (Lv 13–15)', index: 2 },
-    { id: 'byalan', name: '4. 柏亞蘭島 (Lv 16–20)', index: 3 },
-    { id: 'payon', name: '5. 斐揚森林 (Lv 21–25)', index: 4 },
-    { id: 'payon_cave', name: '6. 斐揚洞穴 (Lv 26–30)', index: 5 },
-    { id: 'louyang', name: '🏮 洛陽 燈籠節活動 (Lv 26–30)', index: -1 }
+  const IS_HANS_SERVER = window.location.hostname.includes('hans') || window.location.hostname.includes('webgametw');
+
+  const OFFICIAL_STAGES_CONFIG = [
+    { id: 'auto', name: '🔄 自動 (預設最新關卡)', en: '🔄 Auto (Latest Unlocked)', index: -1 },
+    { id: 'prontera', name: '1. 普隆德拉原野 (Lv 1–8)', en: '1. Prontera Fields (Lv 1–8)', index: 0 },
+    { id: 'sewer', name: '2. 普隆德拉下水道 (Lv 9–12)', en: '2. Prontera Culvert (Lv 9–12)', index: 1 },
+    { id: 'sunken', name: '3. 沉船 (Lv 13–15)', en: '3. Sunken Ship (Lv 13–15)', index: 2 },
+    { id: 'byalan', name: '4. 柏亞蘭島 (Lv 16–20)', en: '4. Byalan Island (Lv 16–20)', index: 3 },
+    { id: 'payon', name: '5. 斐揚森林 (Lv 21–25)', en: '5. Payon Forest (Lv 21–25)', index: 4 },
+    { id: 'payon_cave', name: '6. 斐揚洞穴 (Lv 26–30)', en: '6. Payon Cave (Lv 26–30)', index: 5 },
+    { id: 'louyang', name: '🏮 洛陽 燈籠節活動 (Lv 26–30)', en: '🏮 Louyang Lantern Festival', index: -1 }
   ];
+
+  const HANS_STAGES_CONFIG = [
+    { id: 'auto', name: '🔄 自動 (預設最新關卡)', en: '🔄 Auto (Latest Unlocked)', index: -1 },
+    { id: 'prontera', name: '1. 普隆德拉原野 (Lv 1–8)', en: '1. Prontera Fields (Lv 1–8)', index: 0 },
+    { id: 'sewer', name: '2. 普隆德拉地下水道 (Lv 9–12)', en: '2. Prontera Culvert (Lv 9–12)', index: 1 },
+    { id: 'sunken', name: '3. 失事輪 (Lv 13–15)', en: '3. Sunken Ship (Lv 13–15)', index: 2 },
+    { id: 'byalan', name: '4. 柏伊亞嵐島 (Lv 16–20)', en: '4. Byalan Island (Lv 16–20)', index: 3 },
+    { id: 'payon', name: '5. 斐揚森林 (Lv 21–25)', en: '5. Payon Forest (Lv 21–25)', index: 4 },
+    { id: 'payon_cave', name: '6. 斐揚洞穴 (Lv 26–30)', en: '6. Payon Cave (Lv 26–30)', index: 5 },
+    { id: 'prt_castle', name: '7. 普隆德拉城 (Lv 31–35)', en: '7. Prontera Castle (Lv 31–35)', index: 6 },
+    { id: 'orcs', name: '8. 獸人村 (Lv 31–40)', en: '8. Orc Village (Lv 31–40)', index: 7 },
+    { id: 'pyramid', name: '9. 夢羅克金字塔 (Lv 41–50)', en: '9. Morroc Pyramid (Lv 41–50)', index: 8 },
+    { id: 'maze', name: '10. 迷宮森林 (Lv 51–60)', en: '10. Labyrinth Forest (Lv 51–60)', index: 9 },
+    { id: 'xmas', name: '11. 聖誕節 (Lv 61–65)', en: '11. Lutie Christmas (Lv 61–65)', index: 10 },
+    { id: 'louyang', name: '12. 元宵燈會 (Lv 61–70)', en: '12. Louyang Lanterns (Lv 61–70)', index: 11 },
+    { id: 'c2_gef', name: '13. 吉芬地下迷宮 (Lv 71–76)', en: '13. Geffen Dungeon (Lv 71–76)', index: 12 },
+    { id: 'c2_clock', name: '14. 時計塔地下 (Lv 77–82)', en: '14. Clock Tower B1 (Lv 77–82)', index: 13 },
+    { id: 'c2_abyss', name: '15. 深淵之湖 (Lv 83–88)', en: '15. Abyss Lake (Lv 83–88)', index: 14 },
+    { id: 'c2_glast', name: '16. 克雷斯特漢姆修道院 (Lv 89–94)', en: '16. Glast Heim Abbey (Lv 89–94)', index: 15 },
+    { id: 'c2_nif', name: '17. 尼芙菲姆原野 (Lv 95–99)', en: '17. Niflheim Fields (Lv 95–99)', index: 16 }
+  ];
+
+  const STAGES_CONFIG = IS_HANS_SERVER ? HANS_STAGES_CONFIG : OFFICIAL_STAGES_CONFIG;
 
   const RARITY_NAMES = ['普通', '優良', '稀有', '史詩', '傳說'];
   const RARITY_SCORES = [0, 100, 300, 600, 1200];
@@ -1327,8 +1429,9 @@
     lang: 'zh',               // 介面語言: 'zh' (繁體中文, 預設), 'en' (English)
     enabled: false,           // 總開關 (預設關閉，由玩家手動點擊啟動)
     autoEnterMap: true,       // 自動進入怪獸地圖
-    autoAcceptPartyCheck: false, // 🤝 組隊自動同意出發 (跟車模式: 隊長開始時自動點擊就緒；開啟時自動取消「自動進入地圖」)
-    autoReParty: false,          // 👥 場次結束自動退隊並重新組隊 (防遊戲原生隊伍狀態卡死)
+    partyEnabled: false,      // 👥 組隊功能總開關 (求穩整合版)
+    autoAcceptPartyCheck: false, // 🤝 組隊自動同意出發 (相容性保留)
+    autoReParty: false,          // 👥 場次結束自動退隊並重新組隊 (相容性保留)
     partyRole: 'leader',         // 組隊定位: 'leader' (隊長: 自動邀請勾選好友), 'member' (隊員: 待命自動同意入隊與出發)
     partyInviteFriends: [],      // 👥 隊長模式下目標自動組隊的好友名單 (字串陣列)
     autoSelectLobby: true,    // 自動隨機選擇大廳 (避開額滿大廳)
@@ -1406,10 +1509,20 @@
         const parsed = JSON.parse(saved);
         const merged = Object.assign({}, defaultConfig, parsed);
 
-        // 重整網頁時清空即時統計數據 (Reset session stats on page reload)
-        merged.stats = Object.assign({}, defaultConfig.stats);
+        // 保持統計數據持久化 (Preserve cumulative stats across reloads)
+        if (parsed.stats && typeof parsed.stats === 'object') {
+          merged.stats = Object.assign({}, defaultConfig.stats, parsed.stats);
+        } else {
+          merged.stats = Object.assign({}, defaultConfig.stats);
+        }
 
-        // 預設不自動啟動：載入或重新整理時保持待命狀態，需由玩家手動點擊「▶️ 啟動助手」
+        if (typeof merged.partyEnabled !== 'boolean') {
+          merged.partyEnabled = Boolean(merged.autoReParty || merged.autoAcceptPartyCheck);
+        }
+        merged.autoAcceptPartyCheck = merged.partyEnabled;
+        merged.autoReParty = merged.partyEnabled;
+
+        // 預設不自動啟動：載入或重新整理時保持待命狀態，需由玩家手動點擊「▶️ 啟動運作」
         merged.enabled = false;
 
         // 若舊版儲存了已移除的 keyword 策略，自動轉移至 rarity_first
@@ -1532,7 +1645,7 @@
         return merged;
       }
     } catch (e) {
-      console.warn('[RO Helper] 讀取設定失敗，使用預設值', e);
+      console.warn('[RO Controller] 讀取設定失敗，使用預設值', e);
     }
     const def = Object.assign({}, defaultConfig);
     def.jobSettings = JSON.parse(JSON.stringify(DEFAULT_JOB_SETTINGS));
@@ -1543,7 +1656,7 @@
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
     } catch (e) {
-      console.warn('[RO Helper] 儲存設定失敗', e);
+      console.warn('[RO Controller] 儲存設定失敗', e);
     }
   }
 
@@ -1560,7 +1673,7 @@
         if (Array.isArray(parsed)) return parsed.slice(0, 50);
       }
     } catch (e) {
-      console.warn('[RO Helper] 讀取選卡歷史紀錄失敗', e);
+      console.warn('[RO Controller] 讀取選卡歷史紀錄失敗', e);
     }
     return [];
   }
@@ -1569,7 +1682,7 @@
     try {
       localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(pickHistory.slice(0, 50)));
     } catch (e) {
-      console.warn('[RO Helper] 儲存選卡歷史紀錄失敗', e);
+      console.warn('[RO Controller] 儲存選卡歷史紀錄失敗', e);
     }
   }
 
@@ -1639,7 +1752,7 @@
         renderHistoryModalContent();
       }
     } catch (e) {
-      console.warn('[RO Helper] 記錄選卡歷史例外:', e);
+      console.warn('[RO Controller] 記錄選卡歷史例外:', e);
     }
   }
 
@@ -1751,7 +1864,7 @@
         }
       }, durationMs);
     } catch (e) {
-      console.warn('[RO Helper] showToast 例外:', e);
+      console.warn('[RO Controller] showToast 例外:', e);
     }
   }
 
@@ -1802,7 +1915,7 @@
     return !el.classList.contains('hidden');
   }
 
-  // 鍵盤移動與 NPC 識別輔助函式
+  // 鍵盤移動與 NPC 識別控制函式
   function releaseAllMovementKeys() {
     const moveKeys = [
       { key: 'w', code: 'KeyW' },
@@ -1831,8 +1944,9 @@
   function isCaptainPrompt(text) {
     if (!text) return false;
     const t = text.toLowerCase();
-    const match = t.includes('隊長') || t.includes('captain') || t.includes('capitán') || t.includes('capitan') || t.includes('capitão') || t.includes('capitao') || t.includes('遠征') || t.includes('出征') || t.includes('expedition');
-    const exclude = t.includes('圖書館') || t.includes('書庫') || t.includes('bibliotec') || t.includes('librar') || t.includes('主持人') || t.includes('使者') || t.includes('燈籠') || t.includes('anfitriona') || t.includes('festival') || t.includes('造型') || t.includes('stylist') || t.includes('鐵匠') || t.includes('herrero') || t.includes('smith') || t.includes('郵') || t.includes('correo') || t.includes('postman');
+    // 關鍵修復：加入 '船長'，支援台版官方互動對話「和船長說話」
+    const match = t.includes('隊長') || t.includes('船長') || t.includes('captain') || t.includes('capitán') || t.includes('capitan') || t.includes('capitão') || t.includes('capitao') || t.includes('遠征') || t.includes('出征') || t.includes('expedition');
+    const exclude = t.includes('圖書館') || t.includes('書庫') || t.includes('bibliotec') || t.includes('librar') || t.includes('主持人') || t.includes('使者') || t.includes('燈籠') || t.includes('anfitriona') || t.includes('festival') || t.includes('造型') || t.includes('stylist') || t.includes('鐵匠') || t.includes('herrero') || t.includes('smith') || t.includes('郵') || t.includes('correo') || t.includes('postman') || t.includes('司儀') || t.includes('坐騎') || t.includes('卡普拉') || t.includes('拍賣') || t.includes('轉生') || t.includes('回收');
     return match && !exclude;
   }
 
@@ -1840,7 +1954,7 @@
     if (!text) return false;
     const t = text.toLowerCase();
     const match = t.includes('主持人') || t.includes('節慶') || t.includes('使者') || t.includes('燈籠') || t.includes('anfitriona') || t.includes('festival') || t.includes('hostess') || t.includes('anfitriã') || t.includes('anfitria');
-    const exclude = t.includes('隊長') || t.includes('captain') || t.includes('capitán') || t.includes('capitan') || t.includes('圖書館') || t.includes('書庫') || t.includes('bibliotec') || t.includes('librar') || t.includes('造型') || t.includes('stylist') || t.includes('鐵匠') || t.includes('herrero') || t.includes('smith') || t.includes('郵') || t.includes('correo') || t.includes('postman');
+    const exclude = t.includes('隊長') || t.includes('船長') || t.includes('captain') || t.includes('capitán') || t.includes('capitan') || t.includes('圖書館') || t.includes('書庫') || t.includes('bibliotec') || t.includes('librar') || t.includes('造型') || t.includes('stylist') || t.includes('鐵匠') || t.includes('herrero') || t.includes('smith') || t.includes('郵') || t.includes('correo') || t.includes('postman') || t.includes('司儀') || t.includes('坐騎') || t.includes('卡普拉');
     return match && !exclude;
   }
 
@@ -1858,10 +1972,11 @@
     if (labels.length === 0) return null;
 
     if (type === 'festival') {
+      if (IS_HANS_SERVER) return null; // 台版無獨立燈籠節 NPC (洛陽已整併至常規遠征)
       return labels.find(el => isFestivalPrompt(el.textContent)) || null;
     }
     if (type === 'captain') {
-      return labels.find(el => isCaptainPrompt(el.textContent)) || null;
+      return labels.find(el => isCaptainPrompt(el.textContent) || el.textContent.includes('遠征隊長') || el.textContent.includes('船長')) || null;
     }
     return null;
   }
@@ -2186,7 +2301,7 @@
       btn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
       btn.click();
     } catch (e) {
-      console.warn('[RO Helper] 派發按鈕點擊事件失敗:', e);
+      console.warn('[RO Controller] 派發按鈕點擊事件失敗:', e);
     }
     // 直接調用原生綁定的 onclick 事件函式作為最終保底
     if (typeof btn.onclick === 'function') {
@@ -2229,9 +2344,9 @@
           targetBtn = availableBtns[randomIndex];
           const name = targetBtn.querySelector('b')?.textContent || `Lobby #${targetBtn.dataset.lb}`;
           updateStatus(`🌐 隨機進入大廳: [${name}] (共 ${availableBtns.length} 個可用)`);
-          console.log(`[RO Helper] 隨機選擇非滿員大廳: [${name}] (data-lb: ${targetBtn.dataset.lb})`);
+          console.log(`[RO Controller] 隨機選擇非滿員大廳: [${name}] (data-lb: ${targetBtn.dataset.lb})`);
         } else {
-          console.warn('[RO Helper] 所有大廳皆顯示已滿，嘗試點擊單人大廳或備用按鈕');
+          console.warn('[RO Controller] 所有大廳皆顯示已滿，嘗試點擊單人大廳或備用按鈕');
           const soloBtn = Array.from(dialog.querySelectorAll('#npc-options button')).find(b =>
             (b.textContent || '').toLowerCase().includes('solo') ||
             (b.textContent || '').toLowerCase().includes('單人')
@@ -2248,7 +2363,7 @@
           updateUIStats();
         }
       } catch (err) {
-        console.error('[RO Helper] 選擇大廳發生例外:', err);
+        console.error('[RO Controller] 選擇大廳發生例外:', err);
       } finally {
         setTimeout(() => {
           isSelectingLobby = false;
@@ -2276,23 +2391,24 @@
   }
 
   /**
-   * 切換助手啟動/待命狀態並即時更新懸浮面板 UI
+   * 切換控制中心啟動/待命狀態並即時更新懸浮面板 UI
    */
-  function setHelperEnabled(enabled) {
+  function setControllerEnabled(enabled) {
     config.enabled = !!enabled;
     const toggleBtn = document.getElementById('ro-h-toggle-btn');
     if (toggleBtn) {
       toggleBtn.className = `ro-h-btn-main ${config.enabled ? 'ro-h-btn-stop' : 'ro-h-btn-start'}`;
-      toggleBtn.textContent = config.enabled ? (typeof t === 'function' ? t('btn_stop') : '🛑 停止助手') : (typeof t === 'function' ? t('btn_start') : '▶️ 啟動助手');
+      toggleBtn.textContent = config.enabled ? (typeof t === 'function' ? t('btn_stop') : '🛑 停止運作') : (typeof t === 'function' ? t('btn_start') : '▶️ 啟動運作');
     }
     if (!config.enabled) {
       releaseAllMovementKeys();
       festivalNavPhase = 0;
       navStepCount = 0;
     }
-    updateStatus(config.enabled ? (typeof t === 'function' ? t('status_running') : '助手運行中...') : (typeof t === 'function' ? t('status_standby') : '助手待命中 (未啟動)'));
+    updateStatus(config.enabled ? (typeof t === 'function' ? t('status_running') : '控制中心運作中...') : (typeof t === 'function' ? t('status_standby') : '待命中 (未啟動)'));
     saveConfig();
   }
+  const setHelperEnabled = setControllerEnabled;
 
   let lastLoginActionAt = 0;
   let lastMaintRetryAt = 0;
@@ -2409,9 +2525,9 @@
             lastLoginActionAt = now;
             updateStatus(`🎮 角色 #${chosenIndex + 1} 就緒，進入普隆德拉...`);
             btnPlay.click();
-            // 進入遊戲大廳後自動開啟助手進行後續掛機
+            // 進入遊戲大廳後自動啟動進行後續運作
             setHelperEnabled(true);
-            showToast(`🎉 自動登入成功！已啟動助手 (角色 #${chosenIndex + 1})`, 3000);
+            showToast(`🎉 自動登入成功！已啟動運作 (角色 #${chosenIndex + 1})`, 3000);
             return true;
           }
           return true;
@@ -2452,7 +2568,7 @@
 
   // ==========================================
   // 🔄 大廳閒置/卡死 4 分鐘超時自動重整 (Lobby Idle 4min Auto Reload)
-  // 當助手處於啟動狀態且在普隆德拉大廳超過 4 分鐘未進圖或動作，自動執行 location.reload() (F5)
+  // 當處於啟動狀態且在普隆德拉大廳超過 4 分鐘未進圖或動作，自動執行 location.reload() (F5)
   // ==========================================
   const LOBBY_IDLE_TIMEOUT_MS = 4 * 60 * 1000; // 4 分鐘 (240,000 ms)
   let lobbyIdleStartAt = 0;
@@ -2474,7 +2590,7 @@
 
     const elapsed = now - lobbyIdleStartAt;
     if (elapsed >= LOBBY_IDLE_TIMEOUT_MS) {
-      console.warn(`[RO Helper] ⚠️ 助手卡在大廳超過 4 分鐘 (${Math.round(elapsed / 1000)} 秒) 未進圖，執行自動重整網頁 (F5)...`);
+      console.warn(`[RO Controller] ⚠️ 卡在大廳超過 4 分鐘 (${Math.round(elapsed / 1000)} 秒) 未進圖，執行自動重整網頁 (F5)...`);
       updateStatus('⚠️ 大廳超時 4 分鐘無動作，正在重整網頁 (F5)...');
       showToast('⚠️ 大廳卡死逾 4 分鐘，正在重新整理網頁...', 3000);
       lobbyIdleStartAt = now + 60000; // 防連鎖重複呼叫
@@ -2495,7 +2611,7 @@
   // 開啟 autoAcceptPartyCheck 時，自動偵測並點擊同意出發。
   // ==========================================
   function handlePartyCheck() {
-    if (!config.autoAcceptPartyCheck) return false;
+    if (!config.partyEnabled && !config.autoAcceptPartyCheck) return false;
     const dialog = document.getElementById('npc-dialog');
     if (!dialog || dialog.classList.contains('hidden')) return false;
 
@@ -2519,7 +2635,7 @@
       if (hopBtn) {
         wasInParty = true;
         updateStatus('🤝 偵測到隊長在不同分流，自動跟隨切換至隊長頻道...');
-        console.log('[RO Helper] 🤝 跟隨隊長切換大廳分流 (Party Hop Channel)');
+        console.log('[RO Controller] 🤝 跟隨隊長切換大廳分流 (Party Hop Channel)');
         hopBtn.click();
         hopBtn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
         hopBtn.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }));
@@ -2563,7 +2679,7 @@
           gameOverRestartTimer = null;
         }
         updateStatus('🤝 偵測到隊長隊伍邀請，自動點擊同意加入...');
-        console.log('[RO Helper] 🤝 自動同意隊伍邀請 (Accept Party Invite)');
+        console.log('[RO Controller] 🤝 自動同意隊伍邀請 (Accept Party Invite)');
         acceptBtn.click();
         acceptBtn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
         acceptBtn.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }));
@@ -2604,7 +2720,7 @@
 
       if (primaryBtn) {
         updateStatus('🤝 偵測到隊長發起出發確認，自動點擊同意 (¡Listo!/就緒)...');
-        console.log('[RO Helper] 🤝 觸發組隊自動同意出發 (Party Ready Check)');
+        console.log('[RO Controller] 🤝 觸發組隊自動同意出發 (Party Ready Check)');
         primaryBtn.click();
         primaryBtn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
         primaryBtn.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }));
@@ -2800,7 +2916,7 @@
           // 情況 A：存在行內直接邀請按鈕 [data-act="invite"] (跨分流/跨大廳遠程邀請)
           const inviteBtn = row.querySelector('button[data-act="invite"]');
           if (inviteBtn && !inviteBtn.disabled) {
-            console.log(`[RO Helper] 💌 點擊好友行內邀請按鈕: ${friendName}`);
+            console.log(`[RO Controller] 💌 點擊好友行內邀請按鈕: ${friendName}`);
             inviteBtn.click();
             inviteBtn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
             inviteBtn.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }));
@@ -2819,7 +2935,7 @@
                   return t.includes('invitar') || t.includes('邀請') || t.includes('invite');
                 });
                 if (menuInviteBtn && !menuInviteBtn.disabled) {
-                  console.log(`[RO Helper] 💌 點擊選單邀請按鈕: ${friendName}`);
+                  console.log(`[RO Controller] 💌 點擊選單邀請按鈕: ${friendName}`);
                   menuInviteBtn.click();
                   menuInviteBtn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
                   menuInviteBtn.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }));
@@ -2866,7 +2982,7 @@
                      partyFrame.querySelector('.pf-leave');
     if (leaveBtn) {
       isLeavingParty = true;
-      console.log('[RO Helper] 🚪 點擊退出隊伍按鈕 (Leave Party)');
+      console.log('[RO Controller] 🚪 點擊退出隊伍按鈕 (Leave Party)');
       leaveBtn.click();
       leaveBtn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
       leaveBtn.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }));
@@ -2884,7 +3000,7 @@
                                    return t.includes('salir') || t.includes('離開') || t.includes('退出') || t.includes('si') || t.includes('sí') || t.includes('yes');
                                  });
               if (confirmBtn) {
-                console.log('[RO Helper] 🚪 確認退出隊伍對話框 (Confirm Leave Party)');
+                console.log('[RO Controller] 🚪 確認退出隊伍對話框 (Confirm Leave Party)');
                 confirmBtn.click();
                 confirmBtn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
                 confirmBtn.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }));
@@ -2905,12 +3021,16 @@
   /**
    * 手動或自動解除所有組隊狀態，立即回歸單人模式 (Reset to Solo)
    */
-  function resetToSolo() {
+  /**
+   * 清除組隊內部狀態與殘留資料 (Clear Party State)
+   * 當使用者開啟/關閉組隊功能、切換隊長隊員身分、或場次結束時呼叫
+   */
+  function clearPartyState(leaveCurrentParty = true) {
     wasInParty = false;
     originalLeaderName = '';
     isLeavingParty = false;
-    partyLeaveTriggered = true;
-    partyLeftAt = performance.now();
+    partyLeaveTriggered = false;
+    partyLeftAt = 0;
     partyAllReadyAt = 0;
     lastInviteSentAt = 0;
     memberWaitPartySince = 0;
@@ -2919,73 +3039,70 @@
     friendInviteStats = {};
     friendInviteSkipped.clear();
 
+    if (leaveCurrentParty) {
+      leaveParty();
+    }
+    console.log('[RO Controller] 🧹 已清空組隊暫存狀態 (Clear Party State)');
+  }
+
+  function resetToSolo() {
+    clearPartyState(true);
+
+    config.partyEnabled = false;
     config.partyRole = 'leader';
     config.autoEnterMap = true;
     config.autoAcceptPartyCheck = false;
     config.autoReParty = false;
 
-    // 若遊戲中有組隊面板，嘗試退隊
-    leaveParty();
-
     saveConfig();
 
-    // 更新 UI 控制項狀態
     const enterCb = document.getElementById('ro-h-auto-enter');
-    const partyCheckCb = document.getElementById('ro-h-party-check');
-    const autoRePartyCb = document.getElementById('ro-h-auto-reparty');
-    const repartySub = document.getElementById('ro-h-reparty-sub');
+    const partyEnabledCb = document.getElementById('ro-h-party-enabled');
+    const partySub = document.getElementById('ro-h-party-sub');
     const partyRoleSel = document.getElementById('ro-h-party-role');
     const leaderFriendsBox = document.getElementById('ro-h-leader-friends-box');
+    const memberInfoBox = document.getElementById('ro-h-member-info-box');
+
     if (enterCb) enterCb.checked = true;
-    if (partyCheckCb) partyCheckCb.checked = false;
-    if (autoRePartyCb) autoRePartyCb.checked = false;
-    if (repartySub) repartySub.style.display = 'none';
+    if (partyEnabledCb) partyEnabledCb.checked = false;
+    if (partySub) partySub.style.display = 'none';
     if (partyRoleSel) partyRoleSel.value = 'leader';
     if (leaderFriendsBox) leaderFriendsBox.style.display = 'none';
+    if (memberInfoBox) memberInfoBox.style.display = 'none';
 
     updateStatus('🚶 已重設為單人模式 (自動進入地圖已開啟)');
     showToast('🚶 已解除組隊狀態，回歸單人模式！', 2500);
   }
 
   /**
-   * 👥 場次結束自動退隊與重新組隊流程管理器 (Auto Re-Party Manager)
-   * 內建防死迴圈逾時機制 (Anti-Deadlock)：
-   * - 隊員無隊伍待命逾時 30 秒：自動切換單人出發
-   * - 隊員在隊伍中隊長卡死逾時 60 秒：自動退出隊伍並單人出發
-   * - 隊長邀請單一隊友 20 秒/3次未接受：自動略過該隊友出發
-   * - 隊長等隊友廣場就緒逾時 35 秒：自動退隊單人出發
-   */
-  /**
-   * 👥 組隊流程與兩階段階梯式重組守護管理器 (Two-Phase Party & Auto Re-Party Manager)
+   * 👥 組隊核心流程管理器 (Party Flow Manager) - 簡潔穩定求穩版
    * 
-   * 架構設計：
-   * 1. 方案 A (原生隊伍等待，最長 60 秒)：
-   *    - 隊長返回大廳原地待命，等待隊員全數在同頻道廣場就緒。
-   *    - 60 秒內全員就緒 ➔ 穩定 2 秒後直接啟程進圖，不破壞隊伍！
-   * 2. 60 秒後若仍有隊員未就緒：
-   *    - 若勾選【自動重組】➔ 執行方案 B：
-   *      a) 隊長退出舊隊伍
-   *      b) 隊員偵測隊長離開 (原隊長不在名單 / 自己莫名變隊長 / 隊伍剩自己) ➔ 跟隨退出隊伍！
-   *      c) 隊長退出隊伍後等待 10 秒 (讓伺服器重置狀態)
-   *      d) 隊長開始向勾選好友發送邀請，全員就緒後進圖！
-   *    - 若未勾選【自動重組】：
-   *      隊長不退隊，持續等待至 120 秒；若滿 120 秒隊友仍未出現，隊長自行單人進圖自救！
+   * 核心原則：
+   * 1. 隊員 (Member)：
+   *    - 在大廳一律原地待命等待隊長邀請，絕對不自行尋路進圖或開啟 NPC！
+   *    - 不執行任何逾時強制轉單人自救邏輯，始終維持待命！
+   *    - 若在隊伍中，等待隊長帶隊進場；若隊長退隊或只剩自己，跟隨退隊回到無隊伍待命。
+   * 2. 隊長 (Leader)：
+   *    - 剛回大廳給予 2.5 秒緩衝期讓遊戲渲染完畢。
+   *    - 檢查勾選名單：名單上有任何成員未在隊伍時，每隔 3.0 秒發送邀請，原地持續等待。
+   *    - 名單全員入隊後，檢查是否全員在同頻道廣場就緒 (checkPartyReadiness)；就緒後穩定期 2.0 秒，然後出發進圖 (handleEnterMap)。
+   *    - 不執行超時放生單人進圖邏輯，徹底求穩！
+   * 3. 結束一場遊戲時：
+   *    - 不論隊長或隊員，回到大廳時均自動離開舊隊伍 (leaveParty)，清空狀態重新開始。
    */
-  function handleAutoReParty() {
+  function handlePartyFlow() {
+    if (!config.partyEnabled && !config.autoReParty) return false;
     const state = detectGameState();
-    if (state !== 'LOBBY') return false;
-
-    const targetFriends = config.partyInviteFriends || [];
-    const isConfiguredParty = wasInParty || (config.partyRole === 'leader' && targetFriends.length > 0) || config.partyRole === 'member' || config.autoReParty;
-    if (!isConfiguredParty) return false;
-
-    const timeSinceLobby = lobbyEnteredAt > 0 ? (performance.now() - lobbyEnteredAt) : 0;
+    if (state !== 'LOBBY' && state !== 'FESTIVAL_WINDOW' && state !== 'STAGES_WINDOW' && state !== 'NPC_DIALOG') return false;
 
     // ──────────────────────────────────────────
-    // 1. 隊員模式 (Member / Follower)
+    // 1. 隊員模式 (Member)
     // ──────────────────────────────────────────
     if (config.partyRole === 'member') {
       releaseAllMovementKeys();
+      // 確保隊員絕對不自行尋路進圖
+      config.autoEnterMap = false;
+
       const partyFrame = document.getElementById('party-frame');
       const isPartyVisible = partyFrame && !partyFrame.classList.contains('hidden') && partyFrame.style.display !== 'none';
       const rows = isPartyVisible ? Array.from(partyFrame.querySelectorAll('.pf-row')) : [];
@@ -2993,69 +3110,27 @@
       const amILeader = Boolean(myRow?.querySelector('.pf-lead')) || Boolean(partyFrame?.classList.contains('leader'));
 
       if (isPartyVisible && rows.length > 0) {
-        // 情況 M-In: 目前在隊伍面板中
+        // 在隊伍中
         const memberNames = rows.map(r => (r.querySelector('.pf-name b')?.textContent || r.querySelector('.pf-name')?.childNodes[0]?.textContent || '').trim().toLowerCase());
         const origLeadClean = (originalLeaderName || '').trim().toLowerCase();
 
-        // 🚨 深入研判「隊長是否已離開隊伍」：
-        // 1. 原隊長有名稱記錄，但已從成員名單中消失
-        // 2. 隊員自己莫名變成了隊長 (amILeader) -> 代表原隊長退隊後系統將隊長移交給了我
-        // 3. 隊伍只剩下自己 1 人 (rows.length <= 1) 且身為隊員 -> 隊長已退隊
-        const leaderLeft = (origLeadClean && !memberNames.includes(origLeadClean)) ||
-                           amILeader ||
-                           rows.length <= 1;
-
+        // 隊長退隊判定：原隊長已消失、或自己莫名被移交成隊長、或隊伍只剩下自己 1 人
+        const leaderLeft = (origLeadClean && !memberNames.includes(origLeadClean)) || amILeader || rows.length <= 1;
         if (leaderLeft) {
-          console.log(`[RO Helper] 🚪 偵測到原隊長 [${originalLeaderName || '未知'}] 已退出隊伍 (amILeader:${amILeader}, rows:${rows.length})，隊員跟隨退出隊伍待命！`);
-          updateStatus(`🚪 [隊員跟隨] 偵測到隊長已退隊，跟隨退出隊伍待命...`);
-          showToast(`🚪 隊長已退隊，跟隨退出隊伍！`, 2500);
+          console.log('[RO Controller] 🚪 偵測到隊長已退隊，隊員跟隨退出隊伍待命...');
+          updateStatus('🚪 [隊員跟隨] 隊長已退隊，跟隨退出隊伍等待下一輪邀請...');
           leaveParty();
           wasInParty = false;
-          memberPartyIdleSince = 0;
-          memberWaitPartySince = performance.now();
           return true;
         }
 
-        // 隊長依然健在！正常在隊伍中等待隊長發起出發
-        memberWaitPartySince = 0;
-        if (!memberPartyIdleSince) {
-          memberPartyIdleSince = performance.now();
-        }
-        const elapsed = performance.now() - memberPartyIdleSince;
-        if (elapsed < PARTY_MEMBER_WAIT_START_TIMEOUT_MS) { // 130 秒
-          const sec = Math.max(1, Math.ceil((PARTY_MEMBER_WAIT_START_TIMEOUT_MS - elapsed) / 1000));
-          updateStatus(`🤝 [隊員就緒] 已在隊伍中，等待隊長啟程出發 (防卡死倒數 ${sec} 秒)...`);
-          return true;
-        } else {
-          // 超過 130 秒隊長完全沒動作，退隊自救單人出發
-          console.warn('[RO Helper] 🚨 隊長在隊伍中超過 130 秒未出發！退隊單人出發自救！');
-          updateStatus('🚪 [隊員防卡死] 隊長超時無動作，自動退出隊伍單人出發！');
-          showToast('⚠️ [隊員防卡死] 隊長超時未出發，自動退隊！', 3500);
-          leaveParty();
-          wasInParty = false;
-          config.autoEnterMap = true;
-          memberPartyIdleSince = 0;
-          return true;
-        }
+        // 隊長在隊伍中，隊員原地待命等待隊長出發
+        updateStatus(`🤝 [隊員就緒] 已在隊伍中 (${rows.length}人)，等待隊長啟程出發...`);
+        return true;
       } else {
-        // 情況 M-Out: 目前不在隊伍中 (無隊伍狀態，等待隊長邀請)
-        memberPartyIdleSince = 0;
-        if (!memberWaitPartySince) {
-          memberWaitPartySince = performance.now();
-        }
-        const elapsed = performance.now() - memberWaitPartySince;
-        if (elapsed < PARTY_MEMBER_WAIT_INVITE_TIMEOUT_MS) { // 90 秒
-          const sec = Math.max(1, Math.ceil((PARTY_MEMBER_WAIT_INVITE_TIMEOUT_MS - elapsed) / 1000));
-          updateStatus(`🤝 [隊員待命] 等待隊長組隊邀請 (防卡死倒數 ${sec} 秒)...`);
-          return true;
-        } else {
-          // 逾時 90 秒未收到邀請，自動切換單人模式出發自救
-          console.warn('[RO Helper] 🚨 隊員模式等待組隊邀請超過 90 秒！切換單人模式出發！');
-          updateStatus('🚶 [隊員防卡死] 未收到隊長組隊邀請，自動轉為單人模式出發！');
-          showToast('⚠️ [隊員防卡死] 超時未收到組隊邀請，自動單人出發！', 3500);
-          config.autoEnterMap = true;
-          return false;
-        }
+        // 不在隊伍中：一直等待隊長邀請，不做任何其他動作！
+        updateStatus('🤝 [隊員待命] 原地待命中，等待隊長發起組隊邀請...');
+        return true;
       }
     }
 
@@ -3063,180 +3138,90 @@
     // 2. 隊長模式 (Leader)
     // ──────────────────────────────────────────
     if (config.partyRole === 'leader') {
-      // 若隊長未勾選任何好友且上一局非組隊，視為單人模式
-      if (targetFriends.length === 0 && !wasInParty) {
+      const targetFriends = config.partyInviteFriends || [];
+      if (targetFriends.length === 0) {
+        // 若未勾選任何成員，回歸正常單人進圖
         return false;
       }
 
-      // 前置安全期：剛回大廳前 3.0 秒，預留給遊戲建立連線並渲染隊伍面板
-      if (timeSinceLobby < 3000) {
-        const sec = Math.max(1, Math.ceil((3000 - timeSinceLobby) / 1000));
-        updateStatus(`🏰 剛返回大廳，等待隊友狀態同步 (剩餘 ${sec} 秒)...`);
+      const timeSinceLobby = lobbyEnteredAt > 0 ? (performance.now() - lobbyEnteredAt) : 0;
+      // 剛回大廳前 2.5 秒，預留給遊戲建立連線與渲染
+      if (timeSinceLobby < 2500) {
+        const sec = Math.max(1, Math.ceil((2500 - timeSinceLobby) / 1000));
+        updateStatus(`🏰 返回大廳，等待隊友同步 (${sec} 秒)...`);
         return true;
       }
 
-      // ──────────────────────────────────────────
-      // 第一階段：方案 A (原生隊伍等待，最長 60 秒)
-      // ──────────────────────────────────────────
-      const partyStatus = checkPartyReadiness();
+      // 檢查目前隊伍名單
+      const partyFrame = document.getElementById('party-frame');
+      const isPartyVisible = partyFrame && !partyFrame.classList.contains('hidden') && partyFrame.style.display !== 'none';
+      const memberRows = isPartyVisible ? Array.from(partyFrame.querySelectorAll('.pf-row')) : [];
+      const currentMemberNames = memberRows.map(r => {
+        return (r.querySelector('.pf-name b')?.textContent ||
+                r.querySelector('.pf-name')?.childNodes[0]?.textContent || '').trim().toLowerCase();
+      }).filter(Boolean);
 
-      if (timeSinceLobby < SCHEME_A_WAIT_MEMBERS_TIMEOUT_MS) { // 60 秒內
-        if (partyStatus.ready) {
-          // 全員在同頻道廣場就緒！給予 2.0 秒同步穩定期
-          if (!partyAllReadyAt) {
-            partyAllReadyAt = performance.now();
-          }
-          const readyElapsed = performance.now() - partyAllReadyAt;
-          if (readyElapsed < 2000) {
-            releaseAllMovementKeys();
-            const sec = Math.max(1, Math.ceil((2000 - readyElapsed) / 1000));
-            updateStatus(`✨ [隊長就緒] 全員已在廣場就緒！同步緩衝中 (${sec} 秒)...`);
-            return true;
-          }
-          // 全員就緒且緩衝結束！直接啟程進圖 (不退隊重組，最順暢！)
-          return false;
-        }
+      // 找出尚未入隊的勾選成員
+      const pendingFriends = targetFriends.filter(name => {
+        const clean = name.trim().toLowerCase();
+        return !currentMemberNames.includes(clean);
+      });
 
-        // 隊友尚未全員在同頻道廣場就緒：隊長原地待命
+      if (pendingFriends.length > 0) {
         partyAllReadyAt = 0;
         releaseAllMovementKeys();
-        const remainSec = Math.max(1, Math.ceil((SCHEME_A_WAIT_MEMBERS_TIMEOUT_MS - timeSinceLobby) / 1000));
-        updateStatus(`⏳ [隊長待命] 方案A等待隊友就緒... ${partyStatus.reason} (剩餘 ${remainSec} 秒)`);
+
+        const nextFriend = pendingFriends[0];
+        // 每隔 3.0 秒向尚未入隊的好友發送邀請
+        if (performance.now() - lastInviteSentAt > 3000) {
+          lastInviteSentAt = performance.now();
+          updateStatus(`💌 [隊長邀請] 正在邀請隊友 [${nextFriend}] 入隊...`);
+          showToast(`💌 正在邀請隊友 ${nextFriend}...`, 2000);
+          inviteFriend(nextFriend);
+        } else {
+          updateStatus(`⏳ [隊長待命] 等待隊友 [${pendingFriends.join(', ')}] 入隊...`);
+        }
         return true;
       }
 
-      // ──────────────────────────────────────────
-      // 第二階段：60 秒已過，仍有成員未在廣場就緒！
-      // ──────────────────────────────────────────
-      if (config.autoReParty) {
-        // 【使用者有勾選自動重組】➔ 執行方案 B (退隊 ➔ 等10秒 ➔ 發送邀請重組)
-        
-        // 步驟 B1：隊長退出舊隊伍
-        if (!partyLeaveTriggered) {
-          const partyFrame = document.getElementById('party-frame');
-          const isPartyVisible = partyFrame && !partyFrame.classList.contains('hidden') && partyFrame.style.display !== 'none';
-          const rows = partyFrame ? Array.from(partyFrame.querySelectorAll('.pf-row')) : [];
-
-          partyLeaveTriggered = true;
-          partyLeftAt = performance.now();
-          lastInviteSentAt = 0;
-          friendInviteStats = {};
-          friendInviteSkipped.clear();
-
-          if (isPartyVisible && rows.length > 0) {
-            updateStatus('🚪 [隊長重組] 方案A逾時(60s)，隊長退出舊隊伍以執行重組...');
-            showToast('🚪 方案A逾時，退出舊隊伍準備重組...', 3000);
-            leaveParty();
-            return true;
-          }
-        }
-
-        // 步驟 B2：隊長退出隊伍後等待 10 秒才開始重新組隊
-        const timeSinceLeave = performance.now() - partyLeftAt;
-        if (timeSinceLeave < REPARTY_LEADER_POST_LEAVE_COOLDOWN_MS) { // 10 秒
-          const sec = Math.max(1, Math.ceil((REPARTY_LEADER_POST_LEAVE_COOLDOWN_MS - timeSinceLeave) / 1000));
-          updateStatus(`⏳ [隊長待命] 退隊完成，等待伺服器清理狀態 (剩餘 ${sec} 秒後開始組隊)...`);
-          return true;
-        }
-
-        // 步驟 B3：10 秒過後，隊長開始向勾選好友發送組隊邀請
-        const partyFrame = document.getElementById('party-frame');
-        const isPartyVisible = partyFrame && !partyFrame.classList.contains('hidden') && partyFrame.style.display !== 'none';
-        const memberRows = isPartyVisible ? Array.from(partyFrame.querySelectorAll('.pf-row')) : [];
-        const currentMemberNames = memberRows.map(r => {
-          return (r.querySelector('.pf-name b')?.textContent ||
-                  r.querySelector('.pf-name')?.childNodes[0]?.textContent || '').trim().toLowerCase();
-        }).filter(Boolean);
-
-        const pendingFriends = targetFriends.filter(name => {
-          const clean = name.trim().toLowerCase();
-          return !currentMemberNames.includes(clean) && !friendInviteSkipped.has(clean);
-        });
-
-        if (pendingFriends.length > 0) {
-          partyAllReadyAt = 0;
-          releaseAllMovementKeys();
-
-          const nextFriend = pendingFriends[0];
-          const cleanFriend = nextFriend.trim().toLowerCase();
-
-          const stat = friendInviteStats[cleanFriend] || { count: 0, firstSentAt: 0 };
-          const friendElapsed = stat.firstSentAt > 0 ? (performance.now() - stat.firstSentAt) : 0;
-
-          if (stat.count >= 3 || (stat.firstSentAt > 0 && friendElapsed > PARTY_LEADER_INVITE_TIMEOUT_MS)) {
-            console.warn(`[RO Helper] ⚠️ 隊友 [${nextFriend}] 超過 20 秒未接受邀請，本次略過等待！`);
-            showToast(`⚠️ 隊友 [${nextFriend}] 未回應，隊長略過出發！`, 2500);
-            friendInviteSkipped.add(cleanFriend);
-            return true;
-          }
-
-          // 每隔 4.5 秒向尚未入隊的好友發送邀請
-          if (performance.now() - lastInviteSentAt > 4500) {
-            stat.count = (stat.count || 0) + 1;
-            if (!stat.firstSentAt) stat.firstSentAt = performance.now();
-            friendInviteStats[cleanFriend] = stat;
-
-            updateStatus(`💌 [隊長發起組隊] 正在邀請隊友 [${nextFriend}] (第 ${stat.count}/3 次)...`);
-            showToast(`💌 正在邀請隊友 ${nextFriend} (${stat.count}/3)...`, 2500);
-            lastInviteSentAt = performance.now();
-            inviteFriend(nextFriend);
-          } else {
-            const remainSec = Math.max(1, Math.ceil((PARTY_LEADER_INVITE_TIMEOUT_MS - friendElapsed) / 1000));
-            updateStatus(`⏳ [隊長待命] 等待隊友 [${nextFriend}] 入隊 (防卡死倒數 ${remainSec}s)...`);
-          }
-          return true;
-        }
-
-        // 目標好友已全員入隊 (或未回應者已略過)！檢查全員在同頻道廣場就緒
-        const postRePartyStatus = checkPartyReadiness();
-        if (!postRePartyStatus.ready) {
-          partyAllReadyAt = 0;
-          releaseAllMovementKeys();
-          updateStatus(`⏳ [隊長待命] 隊員已入隊，等待隊友回到廣場... ${postRePartyStatus.reason}`);
-          return true;
-        }
-
-        // 全員就緒！給予 2.0 秒穩定期
-        if (!partyAllReadyAt) {
-          partyAllReadyAt = performance.now();
-        }
-        const readyElapsed = performance.now() - partyAllReadyAt;
-        if (readyElapsed < 2000) {
-          releaseAllMovementKeys();
-          const sec = Math.max(1, Math.ceil((2000 - readyElapsed) / 1000));
-          updateStatus(`✨ [隊長就緒] 全員已在廣場就緒！同步緩衝中 (${sec} 秒)...`);
-          return true;
-        }
-
-        // 全員入隊且就緒，出發進圖！
-        return false;
-
-      } else {
-        // 【使用者未勾選自動重組】➔ 繼續在原生隊伍等待，直到 120 秒後自行進圖
-        if (timeSinceLobby < SCHEME_A_NO_REPARTY_SOLO_TIMEOUT_MS) { // 120 秒內
-          const remainSec = Math.max(1, Math.ceil((SCHEME_A_NO_REPARTY_SOLO_TIMEOUT_MS - timeSinceLobby) / 1000));
-          updateStatus(`⏳ [隊長待命] 未勾選重組，持續等待隊友回到原生隊伍... (自救倒數 ${remainSec} 秒)`);
-          return true;
-        } else {
-          // 滿 120 秒隊友仍未就緒：隊長自行進入副本自救！
-          console.warn('[RO Helper] 🚨 隊長等待隊友超過 120 秒未就緒！自行進入副本！');
-          updateStatus('🚶 [隊長超時] 等待隊友超過 120 秒未就緒，隊長自行出發進入副本！');
-          showToast('⚠️ 等待隊友超時 120 秒，自行進入副本！', 3500);
-          wasInParty = false;
-          return false; // 允許 handleEnterMap() 前往 NPC 出發
-        }
+      // 勾選好友皆已在隊伍中！檢查全員在同頻道廣場就緒
+      const readiness = checkPartyReadiness();
+      if (!readiness.ready) {
+        partyAllReadyAt = 0;
+        releaseAllMovementKeys();
+        updateStatus(`⏳ [隊長待命] 隊員已入隊，等待同頻道廣場就緒... ${readiness.reason}`);
+        return true;
       }
+
+      // 全員就緒！給予 2.0 秒穩定期防抖
+      if (!partyAllReadyAt) {
+        partyAllReadyAt = performance.now();
+      }
+      const readyElapsed = performance.now() - partyAllReadyAt;
+      if (readyElapsed < 2000) {
+        releaseAllMovementKeys();
+        const sec = Math.max(1, Math.ceil((2000 - readyElapsed) / 1000));
+        updateStatus(`✨ [隊長就緒] 全員已在廣場就緒！同步緩衝中 (${sec} 秒)...`);
+        return true;
+      }
+
+      // 全員到齊且在廣場就緒，允許進入出發進圖流程 (handleEnterMap)
+      return false;
     }
 
     return false;
   }
+  const handleAutoReParty = handlePartyFlow;
 
   function handleEnterMap() {
     if (!config.autoEnterMap) return;
+    // 隊員模式下絕對不主動進入地圖 (原地等待隊長帶隊出發)
+    if (config.partyEnabled && config.partyRole === 'member') return;
     // 嚴格限制：僅在遊戲大廳狀態執行出發邏輯，若尚未進入大廳（如標題/選角/連線中）絕對不干涉
     if (!document.body.classList.contains('in-lobby')) return;
     const state = detectGameState();
-    const isFestivalTarget = config.autoFestival || config.targetStage === 'louyang';
+    // 伺服器適配：台版無獨立活動 NPC，洛陽為第 12 關常規遠征關卡；原版則透過活動 NPC 進入
+    const isFestivalTarget = !IS_HANS_SERVER && (config.autoFestival || config.targetStage === 'louyang');
 
     // 0. 大廳安全冷卻與隊友狀態同步檢查 (Lobby Safety Cooldown & Party Readiness)
     if (state === 'LOBBY') {
@@ -3262,7 +3247,7 @@
           return;
         } else {
           // 隊友超時未就緒，自動退隊單人出發自救
-          console.warn('[RO Helper] 🚨 隊友超過時限未在廣場就緒！退出隊伍單人出發防卡死！');
+          console.warn('[RO Controller] 🚨 隊友超過時限未在廣場就緒！退出隊伍單人出發防卡死！');
           updateStatus('🚪 [隊長防卡死] 隊員超時未就緒，退出隊伍單人出發！');
           showToast('⚠️ [隊長防卡死] 隊友超時未就緒，退出隊伍單人出發！', 3500);
           leaveParty();
@@ -3331,15 +3316,23 @@
           if (!targetCard && stagesList) {
             const allCards = Array.from(stagesList.querySelectorAll('.stg-card'));
             const stageKeywords = {
-              prontera: ['prontera', 'campos'],
-              sewer: ['sewer', 'alcantarillas', '下水道'],
-              sunken: ['sunken', 'barco', '沉船'],
-              byalan: ['byalan', 'izlude', '柏亞蘭'],
+              prontera: ['prontera', 'campos', '原野'],
+              sewer: ['sewer', 'alcantarillas', '下水道', '地下水道'],
+              sunken: ['sunken', 'barco', '沉船', '失事輪'],
+              byalan: ['byalan', 'izlude', '柏亞蘭', '柏伊亞嵐'],
               payon: ['bosque de payon', 'payon forest', '斐揚森林'],
               payon_cave: ['cueva de payon', 'payon cave', '斐揚洞穴', 'payon'],
-              prt_castle: ['castillo', 'castle', '城堡'],
-              orcs: ['orcs', 'orca', '獸人'],
-              pyramid: ['pyramid', 'pirámides', 'morroc', '金字塔']
+              prt_castle: ['castillo', 'castle', '城堡', '普隆德拉城'],
+              orcs: ['orcs', 'orca', '獸人', 'aldea orca'],
+              pyramid: ['pyramid', 'pirámides', 'morroc', '金字塔', '夢羅克'],
+              maze: ['maze', 'laberinto', '迷宮'],
+              xmas: ['xmas', 'navidad', '聖誕'],
+              louyang: ['louyang', 'faroles', '燈籠', '洛陽', '燈會', '元宵'],
+              c2_gef: ['geffen', 'mazmorra', '吉芬'],
+              c2_clock: ['reloj', 'clock', '時計塔', '鐘樓'],
+              c2_abyss: ['abyss', 'abismo', '深淵'],
+              c2_glast: ['glast', 'monasterio', '修道院', '古城', '克雷斯特漢姆'],
+              c2_nif: ['nif', 'niflheim', '尼芙菲姆', '尼夫海姆']
             };
             const kws = stageKeywords[targetCfg.id] || [];
             targetCard = allCards.find(c => {
@@ -3356,7 +3349,7 @@
               const isSelected = targetCard.classList.contains('sel');
               if (!isSelected) {
                 updateStatus(`🗺️ 正在切換選取指定關卡: [${targetCfg.name}]...`);
-                console.log(`[RO Helper] 點選目標關卡卡片: ${targetCfg.name} (index: ${targetCfg.index})`);
+                console.log(`[RO Controller] 點選目標關卡卡片: ${targetCfg.name} (index: ${targetCfg.index})`);
                 try {
                   targetCard.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
                 } catch (e) {}
@@ -3635,7 +3628,7 @@
 
         // 階段 3【上 7】：水池已完全在左側身後，前方全為開闊大道，向正北直奔節慶主持人 (純按 W，7~8 步)！
         if (festivalNavPhase === 3) {
-          // 進入開闊直道後，同時啟動 NPC 視覺輔助吸附
+          // 進入開闊直道後，同時啟動 NPC 視覺引導吸附
           const festLabel = findNpcLabel('festival');
           if (festLabel) {
             clickOnNpc(festLabel);
@@ -3770,7 +3763,7 @@
     return false;
   }
 
-  // 技能卡片升級詞綴計分輔助函式 (比對 targets, cooldown, damage, count, area 等)
+  // 技能卡片升級詞綴計分函式 (比對 targets, cooldown, damage, count, area 等)
   function getCardAffixScore(cardText, cardName) {
     if (!config.preferredAffixes || config.preferredAffixes.length === 0) return 0;
     const text = ((cardName || '') + ' ' + (cardText || '')).toLowerCase();
@@ -3867,7 +3860,7 @@
     };
   }
 
-  // 技能名稱比對輔助函式 (支援中英西雙語、普攻多別名、術字容錯比對、冰箭克隆精密防禦)
+  // 技能名稱比對函式 (支援中英西雙語、普攻多別名、術字容錯比對、冰箭克隆精密防禦)
   function isSkillMatched(skillList, cardText, cardName, cardEl = null) {
     if (!skillList || skillList.length === 0) return false;
     const lowerText = (cardText || '').toLowerCase();
@@ -4025,7 +4018,7 @@
         }
       }
     } catch (e) {
-      console.warn('[RO Helper] areSkillSlotsFull 檢測異常:', e);
+      console.warn('[RO Controller] areSkillSlotsFull 檢測異常:', e);
     }
     return false;
   }
@@ -4070,7 +4063,7 @@
         return true;
       }
     } catch (e) {
-      console.warn('[RO Helper] isFocusBuildFormed 檢測異常:', e);
+      console.warn('[RO Controller] isFocusBuildFormed 檢測異常:', e);
     }
     return false;
   }
@@ -4711,42 +4704,60 @@
   }
 
   /**
-   * 多軌並行發送選卡事件 (Focus + PointerDown/Up + Click + Keydown/Up + Back Yes)
-   * 確保穿透遊戲內部的動畫保護鎖與自定義按鍵事件
+   * 多軌並行發送選卡事件 (Focus + Safe Onclick + Click fallback + Back Yes)
+   * 確保穿透遊戲內部的動畫保護鎖
    */
   function dispatchCardSelection(targetCard, cardIndex, totalCards) {
-    if (!targetCard) return;
+    if (!targetCard || isDecoyElement(targetCard)) return;
 
     try {
       targetCard.focus();
-      // 優先調用遊戲原生 onclick 綁定函數，避免向 window 冒泡合成非原生點擊事件觸發反作弊計數 (Vh >= 10)
+
+      // 安全 mock 事件物件：遊戲內部 onclick 會首先執行 Jq(z, A)，存取 z.isTrusted
+      // 若調用 onclick() 未傳參數，會拋出 TypeError: Cannot read properties of undefined (reading 'isTrusted')
+      // 傳入 isTrusted: false 可安全讓 Jq 提前返回，順利執行後續 E(q) 選卡邏輯，且絕不向 window 冒泡！
+      const safeEvent = {
+        isTrusted: false,
+        bubbles: false,
+        cancelable: true,
+        detail: 1,
+        pointerType: 'mouse',
+        clientX: 0,
+        clientY: 0,
+        stopPropagation: () => {},
+        preventDefault: () => {}
+      };
+
       if (typeof targetCard.onclick === 'function') {
-        targetCard.onclick();
+        try {
+          targetCard.onclick(safeEvent);
+        } catch (callErr) {
+          console.warn('[RO Controller] targetCard.onclick 呼叫例外，執行點擊降級:', callErr);
+          targetCard.click();
+        }
       } else {
-        targetCard.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
-        targetCard.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }));
+        targetCard.dispatchEvent(new PointerEvent('pointerdown', { bubbles: false, cancelable: true }));
+        targetCard.dispatchEvent(new PointerEvent('pointerup', { bubbles: false, cancelable: true }));
         targetCard.click();
       }
     } catch (e) {
-      console.warn('[RO Helper] 點擊卡片例外:', e);
+      console.warn('[RO Controller] 點擊卡片例外:', e);
     }
 
-    const keyStr = String(cardIndex + 1);
-    window.dispatchEvent(new KeyboardEvent('keydown', {
-      key: keyStr,
-      code: `Digit${keyStr}`,
-      bubbles: true
-    }));
-    window.dispatchEvent(new KeyboardEvent('keyup', {
-      key: keyStr,
-      code: `Digit${keyStr}`,
-      bubbles: true
-    }));
+    // 🛡️ 安全防護：徹底移除 window.dispatchEvent(KeyboardEvent Digit)
+    // 遊戲局內設有全域鍵盤監聽器 Zq()，當偵測到合成數字鍵累計達到 10 次 (++ZS === 10)，會直接觸發 Lq() 進入 7 天小黑屋！
+    // 點擊 targetCard 原生 onclick 已足夠完成選卡，絕不向 window 派發合成數字鍵。
 
     // 若有翻面確認按鈕，一併點擊確認
     const yesBtn = targetCard.closest('.pk-slot')?.querySelector('[data-yes]') || document.querySelector('#pk-cards [data-yes]');
-    if (yesBtn) {
-      try { yesBtn.click(); } catch (e) {}
+    if (yesBtn && !isDecoyElement(yesBtn)) {
+      try {
+        if (typeof yesBtn.onclick === 'function') {
+          yesBtn.onclick({ stopPropagation: () => {} });
+        } else {
+          yesBtn.click();
+        }
+      } catch (e) {}
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true }));
     }
   }
@@ -4773,7 +4784,7 @@
         return;
       }
 
-      const cards = Array.from(document.querySelectorAll('#pk-cards .pk-card'));
+      const cards = Array.from(document.querySelectorAll('#pk-cards .pk-card')).filter(c => !isDecoyElement(c));
       if (cards.length === 0) {
         window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true }));
         window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true }));
@@ -4811,7 +4822,7 @@
               saveConfig();
               updateUIStats();
               updateStatus(`🎯 執行道具專注: [${cardName}] (Focus ×3 出現率)`);
-              console.log(`[RO Helper] 觸發道具專注特權 (Focus): [${cardName}]`);
+              console.log(`[RO Controller] 觸發道具專注特權 (Focus): [${cardName}]`);
               currentPickActions.push(`🎯 專注道具: [${cardName}]`);
               cardPickerOpenedAt = performance.now();
               triggerActionButton(focusBtn);
@@ -4839,7 +4850,7 @@
               updateUIStats();
               const cloneTag = idInfo.isColdClone ? ` (克隆自 ${idInfo.originalSkill})` : '';
               updateStatus(`🎯 執行技能專注: [${cardName}]${cloneTag} (Focus ×3 出現率)`);
-              console.log(`[RO Helper] 觸發技能專注特權 (Focus): [${cardName}]${cloneTag}`);
+              console.log(`[RO Controller] 觸發技能專注特權 (Focus): [${cardName}]${cloneTag}`);
               currentPickActions.push(`🎯 專注: [${cardName}]${cloneTag}`);
               cardPickerOpenedAt = performance.now();
               triggerActionButton(focusBtn);
@@ -4877,7 +4888,7 @@
               saveConfig();
               updateUIStats();
               updateStatus(`🚫 自動放逐關卡道具: [${cardName}]，等待換抽新卡...`);
-              console.log(`[RO Helper] 觸發道具放逐特權: [${cardName}]`);
+              console.log(`[RO Controller] 觸發道具放逐特權: [${cardName}]`);
               currentPickActions.push(`🚫 放逐道具: [${cardName}]`);
               cardPickerOpenedAt = performance.now();
               triggerActionButton(banishBtn);
@@ -4906,7 +4917,7 @@
               updateUIStats();
               const reason = idInfo.isColdClone ? `克隆技能 [${idInfo.originalSkill}]` : (isBasicAttackCard(card.textContent, cardName) ? '未專注普攻' : (hasRibbon ? '非專注新技能' : '指定技能'));
               updateStatus(`🚫 自動放逐${reason}: [${cardName}]，等待換抽新卡...`);
-              console.log(`[RO Helper] 觸發放逐特權 (Banish) [${reason}]: [${cardName}]`);
+              console.log(`[RO Controller] 觸發放逐特權 (Banish) [${reason}]: [${cardName}]`);
               currentPickActions.push(`🚫 放逐: [${cardName}] (${reason})`);
               cardPickerOpenedAt = performance.now();
               triggerActionButton(banishBtn);
@@ -4918,7 +4929,7 @@
           }
         }
       } else if (fillSlotsFirst && !slotsFull) {
-        console.log('[RO Helper] ⏳ 玩家開啟「優先填滿技能」，4 個技能槽未填滿前暫緩放逐');
+        console.log('[RO Controller] ⏳ 玩家開啟「優先填滿技能」，4 個技能槽未填滿前暫緩放逐');
       }
 
       // ==========================================
@@ -4957,7 +4968,7 @@
         if (foundSingleRerollBtn) {
           pickedActionAttempts.add(targetRerollActKey);
           updateStatus(`🎲 畫面上無專注技能，優先單張重刷卡片 [${targetRerollCardName}]...`);
-          console.log(`[RO Helper] 觸發單張卡片重刷: [${targetRerollCardName}]`);
+          console.log(`[RO Controller] 觸發單張卡片重刷: [${targetRerollCardName}]`);
           currentPickActions.push(`🎲 單張重刷: [${targetRerollCardName}]`);
           cardPickerOpenedAt = performance.now();
           triggerActionButton(foundSingleRerollBtn);
@@ -4976,7 +4987,7 @@
             const deckActKey = `${actId}_${deckSig}`;
             pickedActionAttempts.add(deckActKey);
             updateStatus('🎲 單張重刷已用完且無專注技能，執行『重刷全部』(Reroll All)...');
-            console.log('[RO Helper] 觸發『重刷全部』(Reroll All)');
+            console.log('[RO Controller] 觸發『重刷全部』(Reroll All)');
             currentPickActions.push('🎲 單張用盡，重刷全部');
             cardPickerOpenedAt = performance.now();
             triggerActionButton(rerollDeckBtn);
@@ -5007,7 +5018,7 @@
         : (idInfo.isColdClone ? ` (克隆: ${idInfo.originalSkill})` : '');
 
       updateStatus(`🃏 正在選卡: [${cardName}]${cloneNote} (${rarityText}) (第 ${chosenIndex + 1}/${cards.length} 張)`);
-      console.log(`[RO Helper] 最終選卡: [${cardName}]${cloneNote} (級別: ${rarityText}, 索引: ${chosenIndex})`);
+      console.log(`[RO Controller] 最終選卡: [${cardName}]${cloneNote} (級別: ${rarityText}, 索引: ${chosenIndex})`);
 
       // 判斷選卡類型 (技能 / 寶箱道具 / 劇情裝備) 並寫入歷史紀錄庫
       const pickerTitle = document.getElementById('pk-title')?.textContent?.trim() || '';
@@ -5044,7 +5055,7 @@
         }
 
         // 若 300ms 後卡片視窗還未關閉，嘗試再次多軌點選卡片或按鍵
-        const curCards = Array.from(document.querySelectorAll('#pk-cards .pk-card'));
+        const curCards = Array.from(document.querySelectorAll('#pk-cards .pk-card')).filter(c => !isDecoyElement(c));
         const c = curCards[chosenIndex] || curCards[0];
         if (c) {
           dispatchCardSelection(c, chosenIndex, curCards.length);
@@ -5059,13 +5070,13 @@
         }
       }, 300);
     } catch (err) {
-      console.error('[RO Helper] executeCardPick 發生例外錯誤:', err);
+      console.error('[RO Controller] executeCardPick 發生例外錯誤:', err);
       // 例外自救：重設狀態防止永久死鎖
       isPickingCard = false;
       clearPickerRetry();
-      const anyCard = document.querySelector('#pk-cards .pk-card');
+      const curCards = Array.from(document.querySelectorAll('#pk-cards .pk-card')).filter(c => !isDecoyElement(c));
+      const anyCard = curCards[0];
       if (anyCard) {
-        const curCards = Array.from(document.querySelectorAll('#pk-cards .pk-card'));
         recordPickHistory('skill', curCards, 0, anyCard, ['🚨 例外救援保底']);
         dispatchCardSelection(anyCard, 0, 1);
       }
@@ -5146,8 +5157,8 @@
 
     wasInParty = true;
 
-    // 檢查是否還有尚未選擇的項目 (存在可點擊的 .gl-btns button)
-    const hasUnpicked = serverLoot.querySelector('.gl-btns button');
+    // 檢查是否還有尚未選擇的項目 (存在可點擊且非蜜罐的 .gl-btns button)
+    const hasUnpicked = Array.from(serverLoot.querySelectorAll('.gl-btns button')).some(b => !isDecoyElement(b));
     if (!hasUnpicked) return;
 
     isLootSettling = true;
@@ -5161,10 +5172,10 @@
           const isNeedable = isLegendaryOrRareDrop(row);
           if (isNeedable) {
             const needBtn = row.querySelector('button[data-c="need"]');
-            if (needBtn && !needBtn.disabled && !needBtn.classList.contains('disabled')) {
+            if (needBtn && !needBtn.disabled && !needBtn.classList.contains('disabled') && !isDecoyElement(needBtn)) {
               const itemName = row.querySelector('.gl-name b')?.textContent?.trim() || `#${idx + 1}`;
               updateStatus(`💎 發現傳奇珍寶 [${itemName}]，執行 Need 需求！`);
-              console.log(`[RO Helper] 組隊結算分寶：針對傳奇珍寶 [${itemName}] 執行 Need`);
+              console.log(`[RO Controller] 組隊結算分寶：針對傳奇珍寶 [${itemName}] 執行 Need`);
               needBtn.click();
               needsClicked++;
             }
@@ -5179,7 +5190,7 @@
             const passAllBtn = serverLoot.querySelector('button[data-all="pass"]');
             if (passAllBtn && !passAllBtn.disabled) {
               updateStatus('🤝 組隊結算分寶：執行全部放棄 (Pass/Listo)，讓裝給隊友...');
-              console.log('[RO Helper] 組隊結算分寶：執行全部放棄 (Pass/Listo)');
+              console.log('[RO Controller] 組隊結算分寶：執行全部放棄 (Pass/Listo)');
               passAllBtn.click();
             }
           } else {
@@ -5187,12 +5198,12 @@
             const greedAllBtn = serverLoot.querySelector('button[data-all="greed"]');
             if (greedAllBtn && !greedAllBtn.disabled) {
               updateStatus('🎲 組隊結算分寶：其餘項目執行全部 Greed (貪婪)...');
-              console.log('[RO Helper] 組隊結算分寶：執行全部 Greed');
+              console.log('[RO Controller] 組隊結算分寶：執行全部 Greed');
               greedAllBtn.click();
             } else {
               // 若無批次按鈕，逐一為剩餘項目點擊 Greed
               const remainingGreeds = serverLoot.querySelectorAll('.gl-btns button[data-c="greed"]:not(:disabled)');
-              remainingGreeds.forEach(btn => btn.click());
+              remainingGreeds.forEach(btn => { if (!isDecoyElement(btn)) btn.click(); });
             }
           }
         } finally {
@@ -5202,7 +5213,7 @@
         }
       }, needsClicked > 0 ? 300 : 100);
     } catch (err) {
-      console.warn('[RO Helper] 結算分寶例外:', err);
+      console.warn('[RO Controller] 結算分寶例外:', err);
       isLootSettling = false;
     }
   }
@@ -5234,10 +5245,10 @@
       }
       if (config.lootRollMode === 'all_pass') {
         const passBtn = rollBtns.querySelector('button[data-c="pass"]:not(:disabled)');
-        if (passBtn) passBtn.click();
+        if (passBtn && !isDecoyElement(passBtn)) passBtn.click();
       } else {
         const greedBtn = rollBtns.querySelector('button[data-c="greed"]:not(:disabled)');
-        if (greedBtn) greedBtn.click();
+        if (greedBtn && !isDecoyElement(greedBtn)) greedBtn.click();
       }
     }
   }
@@ -5247,36 +5258,16 @@
    * 依據遊戲內 #go-title 與結算全文進行多國語言智慧判定 (西班牙語 / 英語 / 繁中)
    */
   function getGameOverResult() {
+    // 0. 最高優先級：直接從遊戲記憶體引擎檢查玩家存活狀態 (最精確客觀，不受文字翻譯或DOM延遲干擾)
+    const game = window.D || window.__game;
+    if (game && game.player && game.player.dead) {
+      return 'defeat';
+    }
+
     const goTitle = (document.getElementById('go-title')?.textContent || '').trim().toLowerCase();
     const goFull = (document.getElementById('gameover')?.textContent || '').toLowerCase();
 
-    // 1. 中途放棄 / 退出 / 斷線 (Aborted / Abandoned)
-    const isAbandoned = goTitle.includes('abandon') || 
-                        goTitle.includes('cancel') || 
-                        goTitle.includes('terminada') || 
-                        goTitle.includes('放棄') || 
-                        goTitle.includes('中斷') || 
-                        goTitle.includes('退出') || 
-                        goFull.includes('partida abandonada') ||
-                        goFull.includes('match abandoned');
-    if (isAbandoned) return 'aborted';
-
-    // 2. 明確通關 / 存活 (Victory / Cleared)
-    const isVictory = goTitle.includes('sobrevivido') || 
-                      goTitle.includes('survived') || 
-                      goTitle.includes('superada') || 
-                      goTitle.includes('conquered') || 
-                      goTitle.includes('cleared') || 
-                      goTitle.includes('victoria') || 
-                      goTitle.includes('victory') || 
-                      goTitle.includes('存活') || 
-                      goTitle.includes('生還') || 
-                      goTitle.includes('通關') || 
-                      goTitle.includes('勝利') || 
-                      goTitle.includes('成功');
-    if (isVictory) return 'victory';
-
-    // 3. 明確死亡 / 失敗 (Defeat / Death)
+    // 1. 明確死亡 / 失敗 (Defeat / Death) - 優先於通關判定，防止勝負混淆
     const isDefeatKeyword = goTitle.includes('muerto') || 
                             goTitle.includes('died') || 
                             goTitle.includes('dead') || 
@@ -5288,8 +5279,38 @@
                             goTitle.includes('死') || 
                             goTitle.includes('亡') || 
                             goTitle.includes('敗') || 
-                            goTitle.includes('倒下');
+                            goTitle.includes('倒下') ||
+                            goFull.includes('has muerto') ||
+                            goFull.includes('you died') ||
+                            goFull.includes('你死了');
     if (isDefeatKeyword) return 'defeat';
+
+    // 2. 中途放棄 / 退出 / 斷線 (Aborted / Abandoned)
+    const isAbandoned = goTitle.includes('abandon') || 
+                        goTitle.includes('cancel') || 
+                        goTitle.includes('terminada') || 
+                        goTitle.includes('放棄') || 
+                        goTitle.includes('中斷') || 
+                        goTitle.includes('退出') || 
+                        goFull.includes('partida abandonada') ||
+                        goFull.includes('match abandoned');
+    if (isAbandoned) return 'aborted';
+
+    // 3. 明確通關 / 存活 (Victory / Cleared)
+    const isVictory = goTitle.includes('sobrevivido') || 
+                      goTitle.includes('survived') || 
+                      goTitle.includes('superada') || 
+                      goTitle.includes('conquered') || 
+                      goTitle.includes('cleared') || 
+                      goTitle.includes('victoria') || 
+                      goTitle.includes('victory') || 
+                      goTitle.includes('存活') || 
+                      goTitle.includes('生還') || 
+                      goTitle.includes('通關') || 
+                      goTitle.includes('勝利') || 
+                      goTitle.includes('成功') ||
+                      goTitle.includes('活下來');
+    if (isVictory) return 'victory';
 
     // 4. 預設防呆
     return 'defeat';
@@ -5317,27 +5338,30 @@
 
     // 0. 記錄勝負結算 (記錄通關、失敗與中斷次數，每局結算畫面僅記錄一次)
     if (!gameOverResultRecorded) {
+      const titleText = document.getElementById('go-title')?.textContent?.trim() || '';
+      if (!titleText && (performance.now() - gameOverEnteredAt < 500)) {
+        return; // 等待最多 500ms 讓遊戲 DOM 填充文字，避免空字串誤判
+      }
       gameOverResultRecorded = true;
       isCurrentRunActive = false; // 本局正常結算，解除局內鎖
       stopBattleMovement();
       const result = getGameOverResult();
-      const titleText = document.getElementById('go-title')?.textContent?.trim() || '';
 
       if (result === 'victory') {
         config.stats.victories = (config.stats.victories || 0) + 1;
         saveConfig();
         updateUIStats();
-        console.log(`[RO Helper] 🎉 偵測到副本【成功通關】 (標題: [${titleText}])！累計通關次數: ${config.stats.victories}`);
+        console.log(`[RO Controller] 🎉 偵測到副本【成功通關】 (標題: [${titleText}])！累計通關次數: ${config.stats.victories}`);
       } else if (result === 'aborted') {
         config.stats.aborted = (config.stats.aborted || 0) + 1;
         saveConfig();
         updateUIStats();
-        console.log(`[RO Helper] 🚪 偵測到副本【中途放棄/退出】 (標題: [${titleText}])！累計中斷次數: ${config.stats.aborted}`);
+        console.log(`[RO Controller] 🚪 偵測到副本【中途放棄/退出】 (標題: [${titleText}])！累計中斷次數: ${config.stats.aborted}`);
       } else {
         config.stats.deaths = (config.stats.deaths || 0) + 1;
         saveConfig();
         updateUIStats();
-        console.log(`[RO Helper] 💀 偵測到副本【死亡失敗】 (標題: [${titleText}])，累計失敗次數: ${config.stats.deaths}`);
+        console.log(`[RO Controller] 💀 偵測到副本【死亡失敗】 (標題: [${titleText}])，累計失敗次數: ${config.stats.deaths}`);
       }
     }
 
@@ -5356,7 +5380,7 @@
 
       // 看門狗自救：若按鈕已解鎖且停留超過 3.5 秒仍未重啟，強制連點與按鍵重開跳轉大廳
       if (performance.now() - gameOverEnteredAt > 3500) {
-        console.warn('[RO Helper] 🚨 偵測到結算畫面重開逾時，看門狗強制派發重開！');
+        console.warn('[RO Controller] 🚨 偵測到結算畫面重開逾時，看門狗強制派發重開！');
         updateStatus('🚨 結算重開自救：強制點擊重新開始...');
         btnRestart.click();
         btnRestart.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
@@ -5405,12 +5429,12 @@
   function manualTestPick() {
     const picker = document.getElementById('picker');
     if (!picker || picker.classList.contains('hidden')) {
-      alert('[RO Helper] 目前畫面上沒有開展的選卡介面 (#picker)！請先進入遊戲升級或開寶箱。');
+      alert('[RO Controller] 目前畫面上沒有開展的選卡介面 (#picker)！請先進入遊戲升級或開寶箱。');
       return;
     }
     const cards = Array.from(document.querySelectorAll('#pk-cards .pk-card'));
     if (cards.length === 0) {
-      alert('[RO Helper] 找到 picker 但未讀取到 .pk-card！');
+      alert('[RO Controller] 找到 picker 但未讀取到 .pk-card！');
       return;
     }
 
@@ -5791,6 +5815,14 @@
    * 主循環 (Main Loop)
    */
   function mainLoop() {
+    // 📢 台版專屬：自動關閉全螢幕公告橫幅 (#ro-notice)，防止遮擋畫面與點擊
+    if (IS_HANS_SERVER) {
+      const noticeX = document.getElementById('ro-notice-x');
+      if (noticeX && noticeX.offsetParent !== null) {
+        noticeX.click();
+      }
+    }
+
     // 守護進程：若面板意外遭頁面清空或未加入 DOM，自動重新掛載
     if (document.body && !document.getElementById('ro-helper-panel')) {
       createFloatingPanel();
@@ -5800,7 +5832,7 @@
     currentGameState = state;
     updateStateBadge(state);
 
-    // 🔑 自動登入、重連與選角色守護處理 (即使尚未手動啟動助手，只要開啟自動登入也能自動進入遊戲大廳)
+    // 🔑 自動登入、重連與選角色守護處理 (即使尚未手動啟動運作，只要開啟自動登入也能自動進入遊戲大廳)
     if (config.autoLogin && !document.body.classList.contains('in-lobby') && handleSplashAndLogin(state)) {
       return;
     }
@@ -5812,7 +5844,7 @@
       festivalNavPhase = 0;
       navStepCount = 0;
       lobbyIdleStartAt = 0;
-      updateStatus('助手待命中 (點擊上方按鈕啟動)');
+      updateStatus('待命中 (點擊上方按鈕啟動)');
       return;
     }
 
@@ -5824,7 +5856,7 @@
         config.stats.runsStarted = (config.stats.runsStarted || 0) + 1;
         saveConfig();
         updateUIStats();
-        console.log(`[RO Helper] ⚔️ 偵測到正式進入副本戰鬥，累計進圖次數: ${config.stats.runsStarted}`);
+        console.log(`[RO Controller] ⚔️ 偵測到正式進入副本戰鬥，累計進圖次數: ${config.stats.runsStarted}`);
       }
     } else if (state === 'LOBBY' || state === 'CHAR_SELECT' || state === 'SPLASH') {
       if (isCurrentRunActive) {
@@ -5833,7 +5865,7 @@
         config.stats.aborted = (config.stats.aborted || 0) + 1;
         saveConfig();
         updateUIStats();
-        console.log(`[RO Helper] 🚪 偵測到中途離開/ESC放棄/斷線回大廳，累計中斷次數: ${config.stats.aborted}`);
+        console.log(`[RO Controller] 🚪 偵測到中途離開/ESC放棄/斷線回大廳，累計中斷次數: ${config.stats.aborted}`);
         stopBattleMovement();
       }
     }
@@ -5857,17 +5889,13 @@
       isWalkingToNpc = false;
       lobbyEnteredAt = performance.now();
       lobbyIdleStartAt = performance.now();
-      partyLeaveTriggered = false;
-      partyLeftAt = 0;
-      partyAllReadyAt = 0;
-      lastInviteSentAt = 0;
-      memberWaitPartySince = 0;
-      memberPartyIdleSince = 0;
-      leaderWaitReadySince = 0;
-      friendInviteStats = {};
-      friendInviteSkipped.clear();
+      clearPartyState(false);
+      if (config.partyEnabled) {
+        console.log('[RO Controller] 🏁 場次結束返回大廳，自動退出隊伍以重新組隊');
+        leaveParty();
+      }
       showToast(wasInParty ? '🏰 返回普隆德拉，等待隊友同步中...' : '🏰 返回普隆德拉大廳...', 3000);
-      console.log('[RO Helper] 🏰 返回大廳，啟動安全緩衝期 (wasInParty:', wasInParty, ')');
+      console.log('[RO Controller] 🏰 返回大廳，啟動安全緩衝期 (wasInParty:', wasInParty, ')');
     }
     lastKnownGameState = state;
 
@@ -5903,48 +5931,11 @@
       case 'WIKI_WINDOW':
         if (checkLobbyIdleTimeout()) return;
         crawlWikiItems();
-        if (config.autoAcceptPartyCheck && handlePartyCheck()) {
+        if (config.partyEnabled && handlePartyCheck()) {
           break;
         }
-        if (handleAutoReParty()) {
+        if (handlePartyFlow()) {
           break;
-        }
-        if (config.autoAcceptPartyCheck && !config.autoEnterMap && state === 'LOBBY') {
-          const partyStatus = checkPartyReadiness();
-          if (!partyStatus.inParty) {
-            // 目前不在隊伍中，啟動隊員防卡死倒數計時
-            if (!memberWaitPartySince) memberWaitPartySince = performance.now();
-            const elapsed = performance.now() - memberWaitPartySince;
-            if (elapsed < PARTY_MEMBER_WAIT_INVITE_TIMEOUT_MS) {
-              const sec = Math.max(1, Math.ceil((PARTY_MEMBER_WAIT_INVITE_TIMEOUT_MS - elapsed) / 1000));
-              updateStatus(`🤝 組隊跟車模式中，等待隊長邀請 (防卡死倒數 ${sec}s)...`);
-              break;
-            } else {
-              console.warn('[RO Helper] 🚨 組隊跟車等待逾時 30 秒！自動切換為單人出發防卡死！');
-              updateStatus('🚶 [跟車防卡死] 未收到隊長組隊邀請，自動轉為單人出發！');
-              showToast('⚠️ [跟車防卡死] 超時未收到組隊邀請，自動單人出發！', 3500);
-              config.autoEnterMap = true;
-              memberWaitPartySince = 0;
-            }
-          } else {
-            // 在隊伍中，等待隊長出發
-            if (!memberPartyIdleSince) memberPartyIdleSince = performance.now();
-            const elapsed = performance.now() - memberPartyIdleSince;
-            if (elapsed < PARTY_MEMBER_WAIT_START_TIMEOUT_MS) {
-              const sec = Math.max(1, Math.ceil((PARTY_MEMBER_WAIT_START_TIMEOUT_MS - elapsed) / 1000));
-              updateStatus(`🤝 組隊跟車模式中，等待隊長出發 (防卡死倒數 ${sec}s)...`);
-              break;
-            } else {
-              console.warn('[RO Helper] 🚨 隊長在隊伍中超過 60 秒未出發！退隊單人出發防卡死！');
-              updateStatus('🚪 [跟車防卡死] 隊長超時無動作，自動退出隊伍單人出發！');
-              showToast('⚠️ [跟車防卡死] 隊長超時未出發，自動退隊出發！', 3500);
-              leaveParty();
-              wasInParty = false;
-              config.autoEnterMap = true;
-              memberPartyIdleSince = 0;
-              break;
-            }
-          }
         }
         handleEnterMap();
         break;
@@ -5955,19 +5946,20 @@
         // 看門狗：動態自適應逾時判定 (基礎設定延遲 + 2000ms 保險期，最低 4500ms)，防卡死強制救援選卡
         const watchdogThreshold = Math.max(4500, (config.pickDelayMs || 1450) + 2000);
         if (performance.now() - cardPickerOpenedAt > watchdogThreshold) {
-          console.warn(`[RO Helper] 🚨 偵測到選卡畫面卡死超過 ${(watchdogThreshold / 1000).toFixed(1)} 秒！看門狗強制介入自救選卡！`);
+          console.warn(`[RO Controller] 🚨 偵測到選卡畫面卡死超過 ${(watchdogThreshold / 1000).toFixed(1)} 秒！看門狗強制介入自救選卡！`);
           updateStatus('🚨 選卡逾時自救：強制按鍵與點擊卡片...');
           isPickingCard = false;
           pickedActionAttempts.clear();
           clearPickerRetry();
-          const fallbackCard = document.querySelector('#pk-cards .pk-card');
+          const curCards = Array.from(document.querySelectorAll('#pk-cards .pk-card')).filter(c => !isDecoyElement(c));
+          const fallbackCard = curCards[0];
           if (fallbackCard) {
-            const curCards = Array.from(document.querySelectorAll('#pk-cards .pk-card'));
             recordPickHistory('skill', curCards, 0, fallbackCard, ['🚨 看門狗逾時自救']);
             dispatchCardSelection(fallbackCard, 0, 1);
           }
           window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true }));
-          window.dispatchEvent(new KeyboardEvent('keydown', { key: '1', code: 'Digit1', bubbles: true }));
+          // 🛡️ 安全防護：避免派發合成 Digit1 觸發反作弊 ZS 計數超標 (Lq -> In())
+          // window.dispatchEvent(new KeyboardEvent('keydown', { key: '1', code: 'Digit1', bubbles: true }));
           window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true }));
           cardPickerOpenedAt = performance.now();
           break;
@@ -7874,7 +7866,7 @@
           </div>
         </div>
         <div class="ro-hist-modal-sub">
-          顯示每次升級或開寶箱時，畫面上出現的所有候選項目，以及助手最終選擇的技能或道具。
+          顯示每次升級或開寶箱時，畫面上出現的所有候選項目，以及最終選擇的技能或道具。
         </div>
         <div class="ro-hist-modal-body" id="ro-hist-list-container">
           ${historyHtml}
@@ -8297,9 +8289,19 @@
             <div id="ro-helper-header">
         <div id="ro-helper-title" style="display: flex; align-items: center; gap: 7px;">
           <a href="https://github.com/hijacker4163/ro-survivors-helper" target="_blank" rel="noopener noreferrer" title="🐰 Martian Rabbit (火星兔子程式員) - GitHub Repo" style="display: flex; align-items: center; text-decoration: none;">
-            <img id="ro-h-logo" src="${MARTIAN_RABBIT_LOGO}" alt="Logo" style="width: 24px; height: 24px; border-radius: 6px; object-fit: cover; border: 1px solid rgba(56, 189, 248, 0.4); box-shadow: 0 0 6px rgba(56, 189, 248, 0.35); cursor: pointer; transition: transform 0.15s ease;" onmouseover="this.style.transform='scale(1.15)'" onmouseout="this.style.transform='scale(1.0)'">
+            <img id="ro-h-logo" src="${MARTIAN_RABBIT_LOGO}" alt="Logo" style="width: 26px; height: 26px; border-radius: 6px; object-fit: cover; border: 1px solid rgba(56, 189, 248, 0.4); box-shadow: 0 0 6px rgba(56, 189, 248, 0.35); cursor: pointer; transition: transform 0.15s ease;" onmouseover="this.style.transform='scale(1.15)'" onmouseout="this.style.transform='scale(1.0)'">
           </a>
-          <span style="font-weight: 700; color: #f8fafc; font-size: 13px; letter-spacing: 0.3px;">${t('title')} <small style="color: #38bdf8; font-size: 11px; font-weight: 600;">v${SCRIPT_VERSION}</small></span>
+          <div style="display: flex; flex-direction: column; line-height: 1.25;">
+            <span style="font-weight: 700; color: #f8fafc; font-size: 13px; letter-spacing: 0.3px;">
+              ${t('title')}
+            </span>
+            <div style="display: flex; align-items: center; gap: 4px; margin-top: 2px;">
+              <span style="font-size: 9.5px; font-weight: 600; padding: 0.5px 4px; border-radius: 3px; background: ${IS_HANS_SERVER ? 'rgba(56, 189, 248, 0.2)' : 'rgba(148, 163, 184, 0.2)'}; color: ${IS_HANS_SERVER ? '#38bdf8' : '#cbd5e1'}; border: 1px solid ${IS_HANS_SERVER ? 'rgba(56, 189, 248, 0.4)' : 'rgba(148, 163, 184, 0.3)'};">
+                ${IS_HANS_SERVER ? '台版 HANS' : '國際版'}
+              </span>
+              <small style="color: #38bdf8; font-size: 10.5px; font-weight: 600;">v${SCRIPT_VERSION}</small>
+            </div>
+          </div>
         </div>
         <div style="display: flex; align-items: center; gap: 6px;">
           <button id="ro-helper-lang-btn" class="ro-h-lang-header-btn" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #cbd5e1; font-size: 11px; padding: 2px 6px; border-radius: 4px; cursor: pointer; line-height: 1.2;" title="切換語言 / Switch Language (中文/English)">${config.lang === 'en' ? '🌐 中文' : '🌐 EN'}</button>
@@ -8363,6 +8365,7 @@
           ${t('open_diff_modal')}
         </button>
 
+        ${IS_HANS_SERVER ? '' : `
         <div class="ro-h-row">
           <span class="ro-h-label">${t('auto_festival')}</span>
           <label class="ro-h-switch">
@@ -8370,6 +8373,7 @@
             <span class="ro-h-slider"></span>
           </label>
         </div>
+        `}
 
         <div class="ro-h-row">
           <span class="ro-h-label">${t('auto_lobby')}</span>
@@ -8427,19 +8431,19 @@
           </label>
         </div>
 
-        <!-- 👥 組隊與好友重組設定 -->
+        <!-- 👥 組隊功能 (求穩整合版) -->
         <div class="ro-h-row-group">
           <div style="display: flex; justify-content: space-between; align-items: center;">
-            <span class="ro-h-label">${t('auto_reparty')}</span>
+            <span class="ro-h-label" title="${t('party_feature_tip')}">${t('party_feature')}</span>
             <label class="ro-h-switch">
-              <input type="checkbox" id="ro-h-auto-reparty" ${config.autoReParty ? 'checked' : ''}>
+              <input type="checkbox" id="ro-h-party-enabled" ${config.partyEnabled ? 'checked' : ''}>
               <span class="ro-h-slider"></span>
             </label>
           </div>
-          <div id="ro-h-reparty-sub" style="display: ${config.autoReParty ? 'block' : 'none'}; font-size: 11px; margin-top: 4px;">
+          <div id="ro-h-party-sub" style="display: ${config.partyEnabled ? 'block' : 'none'}; font-size: 11px; margin-top: 4px;">
             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
               <span style="color: #cbd5e1;">${t('party_role')}</span>
-              <select class="ro-h-select" id="ro-h-party-role" style="width: 145px; font-size: 11px; padding: 2px 4px;">
+              <select class="ro-h-select" id="ro-h-party-role" style="width: 155px; font-size: 11px; padding: 2px 4px;">
                 <option value="leader" ${config.partyRole === 'leader' ? 'selected' : ''}>${t('role_leader')}</option>
                 <option value="member" ${config.partyRole === 'member' ? 'selected' : ''}>${t('role_member')}</option>
               </select>
@@ -8458,15 +8462,12 @@
                 <button type="button" id="ro-h-add-friend-btn" class="ro-h-btn-sub" style="font-size: 11px; padding: 0 10px; height: 24px; background: #0284c7; border: 1px solid #0284c7; color: #ffffff;" title="${t('add_friend_btn')}">${t('add_friend_btn')}</button>
               </div>
             </div>
-          </div>
-        </div>
 
-        <div class="ro-h-row">
-          <span class="ro-h-label">${t('auto_party_check')}</span>
-          <label class="ro-h-switch">
-            <input type="checkbox" id="ro-h-party-check" ${config.autoAcceptPartyCheck ? 'checked' : ''}>
-            <span class="ro-h-slider"></span>
-          </label>
+            <!-- 隊員狀態說明專用區 -->
+            <div id="ro-h-member-info-box" style="display: ${config.partyRole === 'member' ? 'block' : 'none'}; border-top: 1px dashed rgba(255,255,255,0.12); padding-top: 4px; color: #94a3b8; font-size: 10px; line-height: 1.4;">
+              ${t('member_info_desc')}
+            </div>
+          </div>
         </div>
 
         <!-- 🛡️ 一鍵解除組隊回歸單人按鈕 (防卡死救援) -->
@@ -8668,8 +8669,8 @@
     stageSel.onchange = () => {
       config.targetStage = stageSel.value;
       if (config.targetStage === 'louyang') {
-        config.autoFestival = true;
-        if (festivalCb) festivalCb.checked = true;
+        config.autoFestival = !IS_HANS_SERVER;
+        if (festivalCb) festivalCb.checked = config.autoFestival;
       } else {
         config.autoFestival = false;
         if (festivalCb) festivalCb.checked = false;
@@ -8692,19 +8693,21 @@
       saveConfig();
     };
 
-    festivalCb.onchange = () => {
-      config.autoFestival = festivalCb.checked;
-      if (config.autoFestival) {
-        config.targetStage = 'louyang';
-        if (stageSel) stageSel.value = 'louyang';
-      } else {
-        if (config.targetStage === 'louyang') {
-          config.targetStage = 'auto';
-          if (stageSel) stageSel.value = 'auto';
+    if (festivalCb) {
+      festivalCb.onchange = () => {
+        config.autoFestival = festivalCb.checked;
+        if (config.autoFestival) {
+          config.targetStage = 'louyang';
+          if (stageSel) stageSel.value = 'louyang';
+        } else {
+          if (config.targetStage === 'louyang') {
+            config.targetStage = 'auto';
+            if (stageSel) stageSel.value = 'auto';
+          }
         }
-      }
-      saveConfig();
-    };
+        saveConfig();
+      };
+    }
 
     lobbyCb.onchange = () => { config.autoSelectLobby = lobbyCb.checked; saveConfig(); };
     resumeCb.onchange = () => { config.autoResume = resumeCb.checked; saveConfig(); };
@@ -8715,7 +8718,7 @@
         isBackgroundModeActive = config.backgroundMode;
         saveConfig();
         updateStatus(config.backgroundMode ? '🔄 已啟用允許縮小與切頁 (背景運行)' : '⏸️ 已停用縮小與切頁背景運行');
-        console.log(`[RO Helper] 允許縮小/切頁背景運行: ${config.backgroundMode ? '開啟' : '關閉'}`);
+        console.log(`[RO Controller] 允許縮小/切頁背景運行: ${config.backgroundMode ? '開啟' : '關閉'}`);
       };
     }
 
@@ -8766,70 +8769,68 @@
         saveConfig();
       };
     }
-    enterCb.onchange = () => {
-      config.autoEnterMap = enterCb.checked;
-      if (enterCb.checked) {
-        // 當開啟自動進入地圖時，自動取消組隊跟車模式（避免衝突）
-        config.autoAcceptPartyCheck = false;
-        if (partyCheckCb) partyCheckCb.checked = false;
-      }
-      saveConfig();
-    };
-
-    if (partyCheckCb) {
-      partyCheckCb.onchange = () => {
-        config.autoAcceptPartyCheck = partyCheckCb.checked;
-        if (partyCheckCb.checked) {
-          // 使用者要求：「如果組隊同意開關打開時，自動進入地圖則取消（關閉）」
-          config.autoEnterMap = false;
-          enterCb.checked = false;
-          updateStatus('🤝 已開啟組隊跟車模式 (已自動關閉自動進入地圖)');
-        }
-        saveConfig();
-      };
-    }
-
-    const autoRePartyCb = document.getElementById('ro-h-auto-reparty');
-    const repartySub = document.getElementById('ro-h-reparty-sub');
+    const partyEnabledCb = document.getElementById('ro-h-party-enabled');
+    const partySub = document.getElementById('ro-h-party-sub');
     const partyRoleSel = document.getElementById('ro-h-party-role');
     const leaderFriendsBox = document.getElementById('ro-h-leader-friends-box');
+    const memberInfoBox = document.getElementById('ro-h-member-info-box');
     const refreshFriendsBtn = document.getElementById('ro-h-refresh-friends');
     const addFriendInput = document.getElementById('ro-h-add-friend-input');
     const addFriendBtn = document.getElementById('ro-h-add-friend-btn');
 
-    if (autoRePartyCb) {
-      autoRePartyCb.onchange = () => {
-        config.autoReParty = autoRePartyCb.checked;
-        if (repartySub) repartySub.style.display = config.autoReParty ? 'block' : 'none';
-        if (config.autoReParty && config.partyRole === 'member') {
-          config.autoAcceptPartyCheck = true;
+    enterCb.onchange = () => {
+      config.autoEnterMap = enterCb.checked;
+      if (enterCb.checked) {
+        if (config.partyEnabled && config.partyRole === 'member') {
+          config.partyEnabled = false;
+          config.autoAcceptPartyCheck = false;
+          config.autoReParty = false;
+          if (partyEnabledCb) partyEnabledCb.checked = false;
+          if (partySub) partySub.style.display = 'none';
+          clearPartyState(true);
+        }
+      }
+      saveConfig();
+    };
+
+    if (partyEnabledCb) {
+      partyEnabledCb.onchange = () => {
+        config.partyEnabled = partyEnabledCb.checked;
+        config.autoAcceptPartyCheck = config.partyEnabled;
+        config.autoReParty = config.partyEnabled;
+        if (partySub) partySub.style.display = config.partyEnabled ? 'block' : 'none';
+        clearPartyState(true);
+
+        if (config.partyEnabled && config.partyRole === 'member') {
           config.autoEnterMap = false;
-          if (partyCheckCb) partyCheckCb.checked = true;
           if (enterCb) enterCb.checked = false;
+          updateStatus('🤝 已開啟組隊功能 (隊員模式：原地待命等待隊長邀請)');
+        } else if (config.partyEnabled && config.partyRole === 'leader') {
+          updateStatus('👑 已開啟組隊功能 (隊長模式：自動邀請好友出發)');
+          renderFriendsListUI();
+        } else {
+          updateStatus('🚶 已關閉組隊功能');
         }
         saveConfig();
-        if (config.autoReParty && config.partyRole === 'leader') {
-          renderFriendsListUI();
-        }
       };
     }
 
     if (partyRoleSel) {
       partyRoleSel.onchange = () => {
         config.partyRole = partyRoleSel.value;
+        clearPartyState(true);
         if (leaderFriendsBox) {
           leaderFriendsBox.style.display = config.partyRole === 'leader' ? 'block' : 'none';
         }
+        if (memberInfoBox) {
+          memberInfoBox.style.display = config.partyRole === 'member' ? 'block' : 'none';
+        }
         if (config.partyRole === 'member') {
-          config.autoAcceptPartyCheck = true;
           config.autoEnterMap = false;
-          if (partyCheckCb) partyCheckCb.checked = true;
           if (enterCb) enterCb.checked = false;
-          updateStatus('🤝 已切換為隊員模式 (自動同意邀請與出發)');
+          updateStatus('🤝 已切換為隊員模式 (原地待命等待邀請與同意進場)');
         } else {
-          config.autoEnterMap = true;
-          if (enterCb) enterCb.checked = true;
-          updateStatus('👑 已切換為隊長模式 (自動組勾選好友並帶隊出發)');
+          updateStatus('👑 已切換為隊長模式 (邀請名單隊友並帶隊進場)');
           renderFriendsListUI();
         }
         saveConfig();
@@ -9070,7 +9071,8 @@
   // ==========================================
   // 10. 暴露主控台工具 (Console Tools)
   // ==========================================
-  window.RO_HELPER = {
+  window.RO_CONTROLLER = window.RO_HELPER = {
+    clearPartyState: clearPartyState,
     testPick: manualTestPick,
     selectCard: selectBestCardIndex,
     getRarity: getCardRarity,
@@ -9085,7 +9087,7 @@
     selectStage: (stageId) => {
       const target = STAGES_CONFIG.find(s => s.id === stageId);
       if (!target) {
-        console.warn(`[RO Helper] 未知關卡 ID: ${stageId}，可用 ID:`, STAGES_CONFIG.map(s => s.id));
+        console.warn(`[RO Controller] 未知關卡 ID: ${stageId}，可用 ID:`, STAGES_CONFIG.map(s => s.id));
         return false;
       }
       config.targetStage = stageId;
@@ -9095,7 +9097,7 @@
       if (stageSel) stageSel.value = stageId;
       const festCb = document.getElementById('ro-h-festival');
       if (festCb) festCb.checked = config.autoFestival;
-      console.log(`[RO Helper] 已切換目標關卡為: ${target.name}`);
+      console.log(`[RO Controller] 已切換目標關卡為: ${target.name}`);
       return true;
     },
     show: () => {
@@ -9117,9 +9119,9 @@
   // 11. 啟動程序 (Bootstrap)
   // ==========================================
   function init() {
-    console.log(`%c[RO Survivors Helper v${SCRIPT_VERSION}] 載入成功 (預設待命未啟動)！`, 'color: #10b981; font-weight: bold;');
+    console.log(`%c[RO Controller v${SCRIPT_VERSION}] 控制中心載入成功 (預設待命未啟動)！`, 'color: #10b981; font-weight: bold;');
     
-    const startHelperUI = () => {
+    const startControllerUI = () => {
       createFloatingPanel();
       // 首次載入或未確認過技能時，自動彈出技能專注與放逐設定視窗供玩家即時勾選
       if (!config.skillsConfigured) {
@@ -9128,9 +9130,9 @@
     };
 
     if (document.body) {
-      startHelperUI();
+      startControllerUI();
     } else {
-      window.addEventListener('DOMContentLoaded', startHelperUI);
+      window.addEventListener('DOMContentLoaded', startControllerUI);
     }
 
     setInterval(mainLoop, 320);
