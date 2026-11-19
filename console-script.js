@@ -1,10 +1,10 @@
-// RO Survivors 主控台即貼即用腳本 v2.0.4-3
+// RO Survivors 主控台即貼即用腳本 v2.0.4
 // @author       Martian Rabbit
 // @homepage     https://github.com/hijacker4163/ro-survivors-helper
 (function () {
   'use strict';
 
-  const SCRIPT_VERSION = '2.0.4-3';
+  const SCRIPT_VERSION = '2.0.4';
 
   let activeBattleGameInstance = null;
 

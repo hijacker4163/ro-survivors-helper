@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Survivors 遊戲自動輔助助手 (RO Survivors Helper)
 // @namespace    https://github.com/hijacker4163/ro-survivors-helper
-// @version      2.0.4-3
+// @version      2.0.4
 // @description  RO Survivors 全面支援關卡內51種道具/神祇專注與放逐配置彈窗(In-Run Items Strategy)、活動副本大廳NPC原生A*避障點擊尋路優化、場次結束自動退隊重組(Auto Re-Party)、隊長好友清單勾選自動邀請、隊員自動同意入隊出發與跟隨分流、大廳5秒同步安全期、隊長端隊友同頻道廣場就緒嚴格檢查、懸浮Toast提示、單人誤搶進防護、徹底杜絕放逐技能(盜賊影步等)被選、非三導管專注技能集齊前優先重抽防佔槽、未完成進度智慧處理、組隊結算自動分寶擲骰(傳奇Need/其餘Greed)、法師三導管必備策略、選卡歷史詳細說明、特權動畫解鎖防禦、選卡逾時看門狗自救保底
 // @author       Martian Rabbit
 // @homepage     https://github.com/hijacker4163/ro-survivors-helper
@@ -14,7 +14,7 @@
 (function () {
   'use strict';
 
-  const SCRIPT_VERSION = '2.0.4-3';
+  const SCRIPT_VERSION = '2.0.4';
 
   let activeBattleGameInstance = null;
 
