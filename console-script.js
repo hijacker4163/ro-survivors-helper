@@ -1,14 +1,13 @@
-// RO Survivors 控制中心即貼即用腳本 v2.0.5
-// @author       Martian Rabbit
-// @homepage     https://github.com/hijacker4163/ro-survivors-helper
-// @supportURL   https://ko-fi.com/martianrabbit
-
+// RO Survivors 控制中心即貼即用腳本 v2.0.6
+// 使用方式：進入遊戲大廳或戰鬥中，按 F12 打開 Console，整段貼上並按 Enter 即可啟動！
+// -------------------------------------------------------------
 (function () {
   'use strict';
 
-  const SCRIPT_VERSION = '2.0.5';
+  const SCRIPT_VERSION = '2.0.6';
 
   let activeBattleGameInstance = null;
+  let lastBattleWon = null;
 
   const MARTIAN_RABBIT_LOGO = 'data:image/png;base64,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';
 
@@ -99,8 +98,13 @@
         [window.setInterval, 'setInterval'],
         [window.setTimeout, 'setTimeout'],
         [EventTarget.prototype.addEventListener, 'addEventListener'],
+        [EventTarget.prototype.removeEventListener, 'removeEventListener'],
         [window.addEventListener, 'addEventListener'],
+        [window.removeEventListener, 'removeEventListener'],
         [origEventTargetAddEventListener, 'addEventListener'],
+        [Document.prototype.hasFocus, 'hasFocus'],
+        [document.hasFocus, 'hasFocus'],
+        [Object.defineProperty, 'defineProperty'],
         [Storage.prototype.getItem, 'getItem'],
         [Storage.prototype.setItem, 'setItem'],
         [origGetItem, 'getItem'],
@@ -112,7 +116,17 @@
       ].filter(([fn]) => typeof fn === 'function'));
 
       Function.prototype.toString = function () {
-        if (SPOOFED_NATIVE_NAMES.has(this) || this === window.fetch || this === Function.prototype.toString || this === Storage.prototype.getItem || this === Storage.prototype.setItem) {
+        if (
+          SPOOFED_NATIVE_NAMES.has(this) ||
+          this === window.fetch ||
+          this === Function.prototype.toString ||
+          this === Storage.prototype.getItem ||
+          this === Storage.prototype.setItem ||
+          this === Object.defineProperty ||
+          this === EventTarget.prototype.addEventListener ||
+          this === EventTarget.prototype.removeEventListener ||
+          this === Document.prototype.hasFocus
+        ) {
           const fnName = SPOOFED_NATIVE_NAMES.get(this) || this.name || 'requestAnimationFrame';
           return `function ${fnName}() { [native code] }`;
         }
@@ -142,18 +156,38 @@
           try {
             const parsedBody = typeof init.body === 'string' ? JSON.parse(init.body) : null;
             if (parsedBody && (parsedBody.op === 'loot' || parsedBody.op === 'gloot') && parsedBody.pt) {
-              // pt 格式: `${Ih},${r0},${l0},${c0}`
+              // pt 格式:
+              // - 舊版 / 台版 (4 維): `${totalPicks},${forgedR0},${forgedL0},${forgedC0}`
+              // - 國際最新版 (10 維真人指紋): `${ep},${Vv},${Wv},${Xv},${tp},${Yv},${Jv},${ap},${Qv},${Zv}`
               const parts = String(parsedBody.pt).split(',');
               if (parts.length >= 4) {
                 const totalPicks = parseInt(parts[0], 10) || 1;
-                // 生成擬真人類反應時間 (平均約 2100ms，離散方差自然，c0 永遠為 0)
+                // 生成擬真人類反應時間 (平均約 2100ms，離散方差自然，c0/Xv 永遠為 0)
                 const humanAvgMs = 1950 + Math.floor(Math.random() * 350);
                 const forgedR0 = totalPicks * humanAvgMs;
                 const forgedL0 = Math.round(forgedR0 * humanAvgMs * 1.06);
                 const forgedC0 = 0; // 0 次小於 1200ms
-                parsedBody.pt = `${totalPicks},${forgedR0},${forgedL0},${forgedC0}`;
+
+                if (parts.length >= 8) {
+                  // 🛡️ 升級 10 維真人指紋遙測（對標國際版 Build f7ad3c447+ 規範）
+                  const ep = Math.min(totalPicks, 9999);
+                  const Vv = forgedR0;
+                  const Wv = forgedL0;
+                  const Xv = 0; // 0 次小於 1200ms
+                  const tp = Math.min(Math.floor(ep * (1.4 + Math.random() * 0.7)), 9999); // 移動鍵按住 >= 1.2s 次數
+                  const Yv = Math.min(Math.floor(tp * (0.8 + Math.random() * 0.18)), 9999); // 移動鍵非 repeat 次數
+                  const Jv = Math.min(Math.floor(tp * (0.16 + Math.random() * 0.1)), 9999); // 移動鍵長按 >= 3s 次數
+                  const ap = ep; // 選卡點擊次數
+                  const Qv = 0; // 0 次無軌跡瞬移點擊
+                  const Zv = 0; // 0 次中心 1px 點擊
+                  parsedBody.pt = `${ep},${Vv},${Wv},${Xv},${tp},${Yv},${Jv},${ap},${Qv},${Zv}`;
+                  console.log('[RO Shield] 🎭 成功偽造結算選卡 10 維遙測矩陣 (pt) 為真人常態分佈：', parsedBody.pt);
+                } else {
+                  // 舊版或台版 4 維相容遙測格式
+                  parsedBody.pt = `${totalPicks},${forgedR0},${forgedL0},${forgedC0}`;
+                  console.log('[RO Shield] 🎭 成功偽造結算選卡 4 維遙測 (pt) 為真人常態分佈：', parsedBody.pt);
+                }
                 init.body = JSON.stringify(parsedBody);
-                console.log('[RO Shield] 🎭 成功偽造結算選卡遙測 (pt) 為真人常態分佈：', parsedBody.pt);
               }
             }
           } catch (e) {}
@@ -170,6 +204,17 @@
         if (Array.isArray(target.pickups) && typeof target.stageId === 'string') {
           activeBattleGameInstance = target;
           window.__roBattleGame = target;
+
+          // 🎯 攔截戰鬥引擎原生勝負事件回調 (精確捕獲存活通關 vs 死亡失敗)
+          if (target.events && typeof target.events.onGameOver === 'function' && !target.events.__resultHooked) {
+            target.events.__resultHooked = true;
+            const origOnGameOver = target.events.onGameOver;
+            target.events.onGameOver = function (won) {
+              lastBattleWon = Boolean(won);
+              console.log("[RO Controller] 🎯 戰鬥引擎原生 onGameOver 捕獲: won = " + won + " -> " + (lastBattleWon ? '勝利通關' : '死亡失敗'));
+              return origOnGameOver.apply(this, arguments);
+            };
+          }
           try {
             const proto = Object.getPrototypeOf(target);
             if (proto && typeof proto.springTrap === 'function' && !proto.__trapShielded) {
@@ -460,7 +505,7 @@
     id: 'basic_attack',
     name: '普通攻擊',
     en: 'Basic Attack',
-    desc: '基礎普攻傷害、攻擊速度或連擊數提升 (普攻 / Attack / 攻擊:屬性附加)'
+    desc: '基礎普攻傷害、攻擊速度或武器升級 (普攻 / 攻擊：雙手長矛 / Attack / 攻擊:屬性附加)',
   };
 
   // ==========================================
@@ -1028,6 +1073,9 @@
       stats_victories: '🏆 通關',
       stats_deaths: '💀 失敗',
       stats_aborted: '🚪 中斷',
+      stats_reset: '重設',
+      stats_reset_btn: '🧹 重設',
+      stats_reset_tooltip: '點擊立即清除並重設所有統計數據（進圖、通關、失敗、中斷次數）',
       stats_tooltip: '雙擊可重設所有統計數據（進圖、通關、失敗、中斷次數）',
       confirm_reset_stats: '是否確定重設所有統計數據（包含進圖、通關、失敗、中斷次數）？',
       stats_reset_toast: '統計數據已重設為 0',
@@ -1134,6 +1182,9 @@
       stats_victories: '🏆 Clear',
       stats_deaths: '💀 Defeat',
       stats_aborted: '🚪 Exit',
+      stats_reset: 'Reset',
+      stats_reset_btn: '🧹 Reset',
+      stats_reset_tooltip: 'Click to clear and reset all statistics (runs, clear, defeats, exits)',
       stats_tooltip: 'Double click to reset all statistics (runs, clear, defeats, exits)',
       confirm_reset_stats: 'Are you sure you want to reset all statistics (runs, clear, defeats, exits)?',
       stats_reset_toast: 'Statistics have been reset to 0',
@@ -1459,8 +1510,8 @@
     kitingRadius: 800,        // 🌀 風箏走位半徑 (像素，推薦 400~800)
     preferredAffixes: ['targets', 'cooldown', 'damage'], // ✨ 技能升級詞綴偏好優先名單 (+目標, 冷卻縮減, 傷害提升 等)
     autoPickCard: true,       // 自動升級選卡
-    autoResume: true,         // 自動解除暫停 (切分頁/ESC 自動繼續)
-    backgroundMode: true,     // 🔄 允許縮小視窗與切換分頁 (背景持續運行 60 FPS)
+    autoResume: false,        // 自動解除暫停 (切分頁/ESC 自動繼續，預設關閉)
+    backgroundMode: false,    // 🔄 允許縮小視窗與切換分頁 (背景持續運行 60 FPS，預設關閉)
     autoLogin: false,          // 🔑 自動登入與選角色 (維修/斷線/重新整理自動進入遊戲大廳，預設關閉)
     charSlot: 1,              // 👤 目標角色編號 (1~15，左上為1往右為2，換行接續)
     autoReloadOnLobbyIdle: false, // 🔄 卡在大廳 4 分鐘無動作自動重整網頁 (預設關閉，開啟需確認排隊風險)
@@ -1509,12 +1560,8 @@
         const parsed = JSON.parse(saved);
         const merged = Object.assign({}, defaultConfig, parsed);
 
-        // 保持統計數據持久化 (Preserve cumulative stats across reloads)
-        if (parsed.stats && typeof parsed.stats === 'object') {
-          merged.stats = Object.assign({}, defaultConfig.stats, parsed.stats);
-        } else {
-          merged.stats = Object.assign({}, defaultConfig.stats);
-        }
+        // 依使用者需求：每次重整網頁時，統計數據 (進圖、通關、失敗、中斷) 自動重置為 0，保持當前會話全新統計
+        merged.stats = Object.assign({}, defaultConfig.stats);
 
         if (typeof merged.partyEnabled !== 'boolean') {
           merged.partyEnabled = Boolean(merged.autoReParty || merged.autoAcceptPartyCheck);
@@ -1545,10 +1592,14 @@
         if (typeof merged.autoAcceptPartyCheck !== 'boolean') {
           merged.autoAcceptPartyCheck = false;
         }
-        if (typeof merged.backgroundMode !== 'boolean') {
-          merged.backgroundMode = true;
+        if (typeof merged.backgroundMode !== 'boolean' || !merged._bgEscDefaultOffV1) {
+          if (!merged._bgEscDefaultOffV1) {
+            merged.backgroundMode = false;
+            merged.autoResume = false;
+            merged._bgEscDefaultOffV1 = true;
+          }
         }
-        isBackgroundModeActive = merged.backgroundMode;
+        isBackgroundModeActive = !!merged.backgroundMode;
         if (typeof merged.autoLogin !== 'boolean' || !merged._autoLoginDefaultOffV2) {
           if (!merged._autoLoginDefaultOffV2) {
             merged.autoLogin = false;
@@ -1895,6 +1946,26 @@
     stateBadgeEl.textContent = stateMap[state] || state;
   }
 
+  function resetAllStats() {
+    config.stats = {
+      runsStarted: 0,
+      victories: 0,
+      deaths: 0,
+      aborted: 0,
+      cardsPicked: 0,
+      restarts: 0,
+      resumes: 0,
+      lobbiesPicked: 0,
+      festivalsEntered: 0,
+      focusedSkills: 0,
+      banishedSkills: 0
+    };
+    lastBattleWon = null;
+    saveConfig();
+    updateUIStats();
+    showToast(t('stats_reset_toast') || '統計數據已重設為 0', 2000);
+  }
+
   function updateUIStats() {
     if (statsEl) {
       const isEn = config.lang === 'en';
@@ -1905,7 +1976,21 @@
       const deathColor = deaths > 0 ? '#f87171' : '#cbd5e1';
       const abortColor = aborts > 0 ? '#fbbf24' : '#cbd5e1';
 
-      statsEl.innerHTML = `<span>${t('stats_runs')}: <b>${runs}</b></span> | <span style="color: #34d399;">${t('stats_victories')}: <b>${wins}</b></span> | <span style="color: ${deathColor};">${t('stats_deaths')}: <b>${deaths}</b></span> | <span style="color: ${abortColor};" title="${isEn ? 'Manual Exit / Disconnected' : '手動放棄 / ESC退出 / 斷線'}">${t('stats_aborted')}: <b>${aborts}</b></span>`;
+      statsEl.innerHTML = `
+        <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+          <div>
+            <span>${t('stats_runs')}: <b>${runs}</b></span> | <span style="color: #34d399;">${t('stats_victories')}: <b>${wins}</b></span> | <span style="color: ${deathColor};">${t('stats_deaths')}: <b>${deaths}</b></span> | <span style="color: ${abortColor};" title="${isEn ? 'Manual Exit / Disconnected' : '手動放棄 / ESC退出 / 斷線'}">${t('stats_aborted')}: <b>${aborts}</b></span>
+          </div>
+          <button id="ro-h-stats-reset-btn" class="ro-h-stats-reset-btn" title="${t('stats_reset_tooltip') || '點擊清除並重設所有統計數據'}">${t('stats_reset_btn') || '🧹 重設'}</button>
+        </div>
+      `;
+      const resetBtn = document.getElementById('ro-h-stats-reset-btn');
+      if (resetBtn) {
+        resetBtn.onclick = (e) => {
+          e.stopPropagation();
+          resetAllStats();
+        };
+      }
     }
   }
 
@@ -3720,13 +3805,22 @@
     }
   }
 
-  // 普通攻擊 (含普攻、Basic Attack、攻擊:屬性附加 等各類衍生詞) 精確識別器
-  function isBasicAttackCard(cardText, cardName) {
+  // 普通攻擊 (含普攻、Basic Attack、武器普攻如「攻擊：雙手長矛」、攻擊:屬性附加 等各類衍生詞) 精確識別器
+  function isBasicAttackCard(cardText, cardName, cardEl = null) {
     const rawName = (cardName || '').trim();
     const rawText = (cardText || '').trim();
     const lowerName = rawName.toLowerCase();
     const lowerText = rawText.toLowerCase();
-    const fullCombined = (lowerName + ' ' + lowerText);
+
+    // 0. 若傳入 DOM 元素，精準提取 sub、lines、badge 等特定區塊以提高命中率
+    let subText = '';
+    let linesText = '';
+    if (cardEl && typeof cardEl.querySelector === 'function') {
+      subText = (cardEl.querySelector('.pk-sub')?.textContent || '').trim().toLowerCase();
+      linesText = (cardEl.querySelector('.pk-lines')?.textContent || '').trim().toLowerCase();
+    }
+
+    const fullCombined = (lowerName + ' ' + lowerText + ' ' + subText + ' ' + linesText).trim();
 
     // 排除特定非普攻獨立技能 (例如商人的「金錢攻擊」)
     if (lowerName.includes('金錢攻擊') || lowerText.includes('金錢攻擊') ||
@@ -3735,7 +3829,7 @@
     }
 
     // 1. 名稱或內文明確包含普通攻擊 / 普攻關鍵詞 (中/英/西)
-    if (fullCombined.includes('普通攻擊') || fullCombined.includes('普攻') ||
+    if (fullCombined.includes('普通攻擊') || fullCombined.includes('普攻') || fullCombined.includes('基本攻擊') ||
         fullCombined.includes('basic attack') || fullCombined.includes('normal attack') ||
         fullCombined.includes('ataque básico') || fullCombined.includes('ataque basico') ||
         fullCombined.includes('ataque normal') || fullCombined.includes('ataques básicos') ||
@@ -3743,19 +3837,40 @@
       return true;
     }
 
-    // 2. 匹配任何包含「攻擊：」、「攻擊:」、「攻擊 -」、「攻擊 ·」、「攻擊/」、「[攻擊]」或英文 Attack:/Ataque: 等格式 (全文任意位置跨符號匹配)
-    if (/攻擊[\s:：·\-\/\[\]]+/.test(fullCombined) ||
-        /attack[\s:：·\-\/\[\]]+/i.test(fullCombined) ||
-        /ataque[\s:：·\-\/\[\]]+/i.test(fullCombined)) {
+    // 2. 武器庫普攻關鍵字正則 (涵蓋雙手長矛、單手長矛、長矛、雙手劍、單手劍、短劍、弓、鈍器、斧、拳套、法杖、書、樂器、鞭子、拳刃、槍械等)
+    const WEAPON_REG = '(?:雙手長矛|單手長矛|長矛|雙手劍|單手劍|短劍|弓|鈍器|斧|雙手斧|單手斧|拳套|法杖|魔杖|書|魔導書|樂器|鞭子|拳刃|槍械|手槍|左輪|步槍|散彈槍|格林機槍|榴彈槍|屬性附加|貫穿|連擊|two-handed spear|spear|lanza|two-handed sword|sword|espada|dagger|daga|bow|arco|mace|maza|axe|hacha|katar|knuckle|staff|baston|infusion|infusión)';
+
+    // 2.1 武器普攻精準模式 A：「攻擊/Attack/Ataque」後接符號或直接接武器名稱 (例如「攻擊：雙手長矛」、「攻擊:雙手長矛」、「攻擊 雙手長矛」、「攻擊(雙手長矛)」、「攻擊【雙手長矛】」)
+    const pAttackWeapon = new RegExp('(?:攻擊|attack|ataque)[\\s:：·\\-\\—–\\/\\[\\]\\(\\)（）【】「」『』|~_]*' + WEAPON_REG, 'i');
+    if (pAttackWeapon.test(fullCombined)) {
       return true;
     }
 
-    // 3. 卡片名稱純為「攻擊」或「Attack」或「Ataque」
-    if (lowerName === '攻擊' || lowerName === 'attack' || lowerName === 'ataque') {
+    // 2.2 武器普攻精準模式 B：武器名稱後接「攻擊/普攻/Attack/Ataque」(例如「雙手長矛攻擊」、「雙手長矛：攻擊」、「長矛普攻」)
+    const pWeaponAttack = new RegExp(WEAPON_REG + '[\\s:：·\\-\\—–\\/\\[\\]\\(\\)（）【】「」『』|~_]*(?:攻擊|普攻|attack|ataque)(?![力速度範圍百分比])', 'i');
+    if (pWeaponAttack.test(fullCombined)) {
       return true;
     }
 
-    // 4. 特徵普攻專有詞綴：屬性附加 (Infusion)
+    // 3. 通用前綴模式：匹配任何包含「攻擊：」、「攻擊:」、「攻擊 -」、「攻擊 ·」、「攻擊/」、「[攻擊]」、「【攻擊】」或英文 Attack:/Ataque: 等格式
+    // 透過非貪婪與前瞻正則，防禦料理/純數值詞條（如排除「物理攻擊」、「魔法攻擊」、「攻擊力 +10」、「攻擊速度 +15%」）
+    const pAttackPrefix = /(?:^|[^物魔遠近物理魔法])(?:攻擊|attack|ataque)[\s:：·\-\—–\/\[\]\(\)（）【】「」『』|~_]+/i;
+    const matchPrefix = pAttackPrefix.exec(fullCombined);
+    if (matchPrefix) {
+      // 檢查緊接在攻擊符號後面的內容，若非純數值加成詞（力/速度/範圍/百分比/+數字），即判定為普攻卡
+      const afterStr = fullCombined.slice(matchPrefix.index + matchPrefix[0].length).trim();
+      if (!/^(?:\+|\d|力|速度|範圍|百分比|增加|提升|加成)/.test(afterStr)) {
+        return true;
+      }
+    }
+
+    // 4. 卡片名稱或副標題純為「攻擊」或「Attack」或「Ataque」
+    if (lowerName === '攻擊' || lowerName === 'attack' || lowerName === 'ataque' ||
+        subText === '攻擊' || subText === 'attack' || subText === 'ataque') {
+      return true;
+    }
+
+    // 5. 特徵普攻專有詞綴：屬性附加 (Infusion)
     if (fullCombined.includes('屬性附加') || fullCombined.includes('infusión') || fullCombined.includes('infusion')) {
       return true;
     }
@@ -3873,18 +3988,19 @@
       const s = (rawSkill || '').toLowerCase().trim();
       if (!s) continue;
       
-      // 特殊處理：普通攻擊 / 普攻別名比對 (精準識別「攻擊：屬性附加」等衍生升級)
-      if (s === '普通攻擊' || s === '普攻' || s === 'basic attack' || s === 'normal attack' || s === '攻擊') {
-        if (isBasicAttackCard(cardText, cardName)) {
+      // 特殊處理：普通攻擊 / 普攻別名比對 (精準識別「攻擊：雙手長矛」、「攻擊：屬性附加」等武器/普攻升級)
+      if (s === '普通攻擊' || s === '普攻' || s === '普攻流' || s === '基本攻擊' ||
+          s === 'basic attack' || s === 'normal attack' || s === '攻擊' || s === 'attack' || s === 'ataque') {
+        if (isBasicAttackCard(cardText, cardName, cardEl)) {
           return true;
         }
         continue;
       }
 
-      // 關鍵防呆：若此張卡片已被判定為「普通攻擊衍生卡」(例如「攻擊：屬性附加」)，
+      // 關鍵防呆：若此張卡片已被判定為「普通攻擊衍生卡」(例如「攻擊：雙手長矛」、「攻擊：屬性附加」)，
       // 則它絕不是常規獨立技能 (如火箭術、冰箭術、雷擊術等)！
       // 嚴禁因為其說明文字中包含「火箭術」、「冰箭」等字眼而誤判為該技能！
-      if (isBasicAttackCard(cardText, cardName)) {
+      if (isBasicAttackCard(cardText, cardName, cardEl)) {
         continue;
       }
 
@@ -4077,11 +4193,26 @@
     const cardText = (card.textContent || '').toLowerCase();
     const cardName = card.querySelector('.pk-name')?.textContent?.trim() || '';
 
-    // 若為普通攻擊衍生卡 (如「攻擊：屬性附加」)，只有在玩家明確專注普攻時才算專注
-    if (isBasicAttackCard(cardText, cardName)) {
+    // 若為普通攻擊衍生卡 (如「攻擊：雙手長矛」、「攻擊：屬性附加」等各類武器普攻卡)
+    if (isBasicAttackCard(cardText, cardName, card)) {
       return focusList.some(f => {
         const lf = (f || '').toLowerCase().trim();
-        return lf === '普通攻擊' || lf === '普攻' || lf === 'basic attack' || lf === 'normal attack' || lf === '攻擊';
+        if (!lf) return false;
+        // 1. 廣義普攻/攻擊關鍵字命中
+        if (lf === '普通攻擊' || lf === '普攻' || lf === '普攻流' || lf === '基本攻擊' ||
+            lf === '攻擊' || lf === 'attack' || lf === 'basic attack' || lf === 'normal attack' ||
+            lf === 'ataque' || lf === 'ataque básico' || lf === 'ataque basico') {
+          return true;
+        }
+        // 2. 玩家在焦點清單中指定了特定武器名稱 (例如「雙手長矛」、「長矛」、「攻擊：雙手長矛」)
+        if (cardText.includes(lf) || cardName.toLowerCase().includes(lf)) {
+          return true;
+        }
+        // 3. 玩家輸入的關鍵詞本身符合普攻特徵
+        if (isBasicAttackCard(lf, lf)) {
+          return true;
+        }
+        return false;
       });
     }
 
@@ -4138,7 +4269,7 @@
     }
 
     // 未專注的普通攻擊升級卡視為放逐對象
-    const isBasicAttack = isBasicAttackCard(cardText, cardName);
+    const isBasicAttack = isBasicAttackCard(cardText, cardName, card);
     if (isBasicAttack) {
       return true;
     }
@@ -4630,7 +4761,7 @@
       const rarity = getCardRarity(card);
       const isFocus = isCardFocusTarget(card, curFocusList, curBanishList);
       const isBanish = isCardBanishTarget(card, curFocusList, curBanishList);
-      const isBasicAttack = isBasicAttackCard(text, name);
+      const isBasicAttack = isBasicAttackCard(text, name, card);
       const hasRibbon = !!card.querySelector('.pk-ribbon');
       const affixScore = getCardAffixScore(text, name);
 
@@ -4713,6 +4844,19 @@
     try {
       targetCard.focus();
 
+      // 計算卡片幾何坐標並給予安全的隨機偏移（偏離中心 15~35px），徹底免疫遊戲 Zv++ (幾何中心 1px 機器人點擊計數)
+      let safeClientX = 100;
+      let safeClientY = 100;
+      try {
+        if (typeof targetCard.getBoundingClientRect === 'function') {
+          const rect = targetCard.getBoundingClientRect();
+          const offsetX = (rect.width * 0.5) + (Math.random() > 0.5 ? 1 : -1) * (15 + Math.floor(Math.random() * 20));
+          const offsetY = (rect.height * 0.5) + (Math.random() > 0.5 ? 1 : -1) * (15 + Math.floor(Math.random() * 25));
+          safeClientX = Math.round(rect.left + offsetX);
+          safeClientY = Math.round(rect.top + offsetY);
+        }
+      } catch (e) {}
+
       // 安全 mock 事件物件：遊戲內部 onclick 會首先執行 Jq(z, A)，存取 z.isTrusted
       // 若調用 onclick() 未傳參數，會拋出 TypeError: Cannot read properties of undefined (reading 'isTrusted')
       // 傳入 isTrusted: false 可安全讓 Jq 提前返回，順利執行後續 E(q) 選卡邏輯，且絕不向 window 冒泡！
@@ -4722,8 +4866,8 @@
         cancelable: true,
         detail: 1,
         pointerType: 'mouse',
-        clientX: 0,
-        clientY: 0,
+        clientX: safeClientX,
+        clientY: safeClientY,
         stopPropagation: () => {},
         preventDefault: () => {}
       };
@@ -4915,7 +5059,7 @@
               config.stats.banishedSkills = (config.stats.banishedSkills || 0) + 1;
               saveConfig();
               updateUIStats();
-              const reason = idInfo.isColdClone ? `克隆技能 [${idInfo.originalSkill}]` : (isBasicAttackCard(card.textContent, cardName) ? '未專注普攻' : (hasRibbon ? '非專注新技能' : '指定技能'));
+              const reason = idInfo.isColdClone ? `克隆技能 [${idInfo.originalSkill}]` : (isBasicAttackCard(card.textContent, cardName, card) ? '未專注普攻' : (hasRibbon ? '非專注新技能' : '指定技能'));
               updateStatus(`🚫 自動放逐${reason}: [${cardName}]，等待換抽新卡...`);
               console.log(`[RO Controller] 觸發放逐特權 (Banish) [${reason}]: [${cardName}]`);
               currentPickActions.push(`🚫 放逐: [${cardName}] (${reason})`);
@@ -5255,20 +5399,63 @@
 
   /**
    * 判定副本結算結果 (通關 Victory / 失敗 Defeat / 中斷 Aborted)
-   * 依據遊戲內 #go-title 與結算全文進行多國語言智慧判定 (西班牙語 / 英語 / 繁中)
+   * 依據遊戲引擎原生事件、玩家存活狀態與 #go-title 多國語言智慧綜合判定 (西班牙語 / 英語 / 繁中)
    */
   function getGameOverResult() {
-    // 0. 最高優先級：直接從遊戲記憶體引擎檢查玩家存活狀態 (最精確客觀，不受文字翻譯或DOM延遲干擾)
-    const game = window.D || window.__game;
+    // 0. 最高優先級：直接從戰鬥引擎實例與原生事件回調檢查 (最精確客觀，不受文字翻譯、DOM延遲或模板假字干擾)
+    const game = activeBattleGameInstance || window.__roBattleGame || (typeof D !== 'undefined' ? D : null);
+
+    // 若引擎事件回調已精確捕獲勝負
+    if (lastBattleWon === true) {
+      return 'victory';
+    }
+    if (lastBattleWon === false) {
+      return 'defeat';
+    }
+
+    // 若角色在戰鬥中已陣亡
     if (game && game.player && game.player.dead) {
       return 'defeat';
     }
 
     const goTitle = (document.getElementById('go-title')?.textContent || '').trim().toLowerCase();
-    const goFull = (document.getElementById('gameover')?.textContent || '').toLowerCase();
+    const goStats = document.getElementById('go-stats');
+    const isStatsPopulated = Boolean(goStats && goStats.children && goStats.children.length > 0);
 
-    // 1. 明確死亡 / 失敗 (Defeat / Death) - 優先於通關判定，防止勝負混淆
+    // 1. 中途放棄 / 退出 / 斷線 (Aborted / Abandoned)
+    const isAbandoned = goTitle.includes('abandon') || 
+                        goTitle.includes('cancel') || 
+                        goTitle.includes('terminada') || 
+                        goTitle.includes('放棄') || 
+                        goTitle.includes('中斷') || 
+                        goTitle.includes('退出');
+    if (isAbandoned) return 'aborted';
+
+    // 2. 明確通關 / 存活 (Victory / Cleared) - 優先於模糊失敗判定，防止勝負混淆
+    const isVictory = goTitle.includes('sobreviv') || 
+                      goTitle.includes('surviv') || 
+                      goTitle.includes('superad') || 
+                      goTitle.includes('conquer') || 
+                      goTitle.includes('cleared') || 
+                      goTitle.includes('clear') || 
+                      goTitle.includes('victor') || 
+                      goTitle.includes('win') || 
+                      goTitle.includes('存活') || 
+                      goTitle.includes('生還') || 
+                      goTitle.includes('通關') || 
+                      goTitle.includes('通過') || 
+                      goTitle.includes('攻頂') || 
+                      goTitle.includes('勝利') || 
+                      goTitle.includes('成功') || 
+                      goTitle.includes('活下來') ||
+                      goTitle.includes('完結') ||
+                      goTitle.includes('過關') ||
+                      goTitle.includes('大獲全勝');
+    if (isVictory) return 'victory';
+
+    // 3. 明確死亡 / 失敗 (Defeat / Death) - 嚴格字詞比對，避免單一字元「敗」、「死」造成誤殺 (例如「擊敗首領」誤判為失敗)
     const isDefeatKeyword = goTitle.includes('muerto') || 
+                            goTitle.includes('morreu') || 
                             goTitle.includes('died') || 
                             goTitle.includes('dead') || 
                             goTitle.includes('defeat') || 
@@ -5276,43 +5463,21 @@
                             goTitle.includes('failed') || 
                             goTitle.includes('caído') || 
                             goTitle.includes('fallen') || 
-                            goTitle.includes('死') || 
-                            goTitle.includes('亡') || 
-                            goTitle.includes('敗') || 
-                            goTitle.includes('倒下') ||
-                            goFull.includes('has muerto') ||
-                            goFull.includes('you died') ||
-                            goFull.includes('你死了');
+                            goTitle.includes('陣亡') || 
+                            goTitle.includes('戰死') || 
+                            goTitle.includes('死亡') || 
+                            goTitle.includes('失敗') || 
+                            goTitle.includes('殞命') || 
+                            goTitle.includes('倒下') || 
+                            (goTitle.includes('你死了') && !goTitle.includes('活下來'));
     if (isDefeatKeyword) return 'defeat';
 
-    // 2. 中途放棄 / 退出 / 斷線 (Aborted / Abandoned)
-    const isAbandoned = goTitle.includes('abandon') || 
-                        goTitle.includes('cancel') || 
-                        goTitle.includes('terminada') || 
-                        goTitle.includes('放棄') || 
-                        goTitle.includes('中斷') || 
-                        goTitle.includes('退出') || 
-                        goFull.includes('partida abandonada') ||
-                        goFull.includes('match abandoned');
-    if (isAbandoned) return 'aborted';
+    // 4. 若遊戲引擎存在且玩家角色並未死亡 (game.player.dead === false)，且結算數據已渲染完畢，判定為通關
+    if (game && game.player && !game.player.dead && isStatsPopulated) {
+      return 'victory';
+    }
 
-    // 3. 明確通關 / 存活 (Victory / Cleared)
-    const isVictory = goTitle.includes('sobrevivido') || 
-                      goTitle.includes('survived') || 
-                      goTitle.includes('superada') || 
-                      goTitle.includes('conquered') || 
-                      goTitle.includes('cleared') || 
-                      goTitle.includes('victoria') || 
-                      goTitle.includes('victory') || 
-                      goTitle.includes('存活') || 
-                      goTitle.includes('生還') || 
-                      goTitle.includes('通關') || 
-                      goTitle.includes('勝利') || 
-                      goTitle.includes('成功') ||
-                      goTitle.includes('活下來');
-    if (isVictory) return 'victory';
-
-    // 4. 預設防呆
+    // 5. 預設防呆
     return 'defeat';
   }
 
@@ -5339,8 +5504,12 @@
     // 0. 記錄勝負結算 (記錄通關、失敗與中斷次數，每局結算畫面僅記錄一次)
     if (!gameOverResultRecorded) {
       const titleText = document.getElementById('go-title')?.textContent?.trim() || '';
-      if (!titleText && (performance.now() - gameOverEnteredAt < 500)) {
-        return; // 等待最多 500ms 讓遊戲 DOM 填充文字，避免空字串誤判
+      const goStats = document.getElementById('go-stats');
+      const isStatsPopulated = Boolean(goStats && goStats.children && goStats.children.length > 0);
+
+      // 等待遊戲結算 DOM 填充完成（#go-stats 產生統計區塊且 #go-title 已由程式更新），避免未填入前靜態 HTML "Has muerto" 搶跑誤判
+      if ((!titleText || !isStatsPopulated) && (performance.now() - gameOverEnteredAt < 600)) {
+        return; // 等待最多 600ms 讓遊戲 DOM 填充完成
       }
       gameOverResultRecorded = true;
       isCurrentRunActive = false; // 本局正常結算，解除局內鎖
@@ -5853,10 +6022,21 @@
       lobbyIdleStartAt = 0;
       if (!isCurrentRunActive) {
         isCurrentRunActive = true;
+        lastBattleWon = null; // 重置本局勝負捕獲狀態
         config.stats.runsStarted = (config.stats.runsStarted || 0) + 1;
         saveConfig();
         updateUIStats();
         console.log(`[RO Controller] ⚔️ 偵測到正式進入副本戰鬥，累計進圖次數: ${config.stats.runsStarted}`);
+      }
+      const curEngine = activeBattleGameInstance || window.__roBattleGame || (typeof D !== 'undefined' ? D : null);
+      if (curEngine && curEngine.events && typeof curEngine.events.onGameOver === 'function' && !curEngine.events.__resultHooked) {
+        curEngine.events.__resultHooked = true;
+        const origOnGameOver = curEngine.events.onGameOver;
+        curEngine.events.onGameOver = function (won) {
+          lastBattleWon = Boolean(won);
+          console.log("[RO Controller] 🎯 戰鬥引擎原生 onGameOver 捕獲: won = " + won + " -> " + (lastBattleWon ? '勝利通關' : '死亡失敗'));
+          return origOnGameOver.apply(this, arguments);
+        };
       }
     } else if (state === 'LOBBY' || state === 'CHAR_SELECT' || state === 'SPLASH') {
       if (isCurrentRunActive) {
@@ -8264,6 +8444,22 @@
           padding-top: 8px;
           line-height: 1.5;
         }
+        .ro-h-stats-reset-btn {
+          background: rgba(239, 68, 68, 0.15);
+          color: #fca5a5;
+          border: 1px solid rgba(239, 68, 68, 0.3);
+          border-radius: 4px;
+          padding: 1px 5px;
+          font-size: 10px;
+          cursor: pointer;
+          transition: all 0.2s;
+          margin-left: 6px;
+          white-space: nowrap;
+        }
+        .ro-h-stats-reset-btn:hover {
+          background: rgba(239, 68, 68, 0.35);
+          color: #ffffff;
+        }
         .ro-h-stats b {
           color: #f1f5f9;
         }
@@ -8394,7 +8590,7 @@
         <div class="ro-h-row">
           <span class="ro-h-label" title="${t('background_mode_tip')}">${t('background_mode')}</span>
           <label class="ro-h-switch">
-            <input type="checkbox" id="ro-h-background-mode" ${config.backgroundMode !== false ? 'checked' : ''}>
+            <input type="checkbox" id="ro-h-background-mode" ${config.backgroundMode ? 'checked' : ''}>
             <span class="ro-h-slider"></span>
           </label>
         </div>
@@ -8588,24 +8784,7 @@
 
     if (statsEl) {
       statsEl.ondblclick = () => {
-        if (confirm(t('confirm_reset_stats') || '是否確定重設所有統計數據（包含進圖、通關、失敗、中斷次數）？')) {
-          config.stats = {
-            runsStarted: 0,
-            victories: 0,
-            deaths: 0,
-            aborted: 0,
-            cardsPicked: 0,
-            restarts: 0,
-            resumes: 0,
-            lobbiesPicked: 0,
-            festivalsEntered: 0,
-            focusedSkills: 0,
-            banishedSkills: 0
-          };
-          saveConfig();
-          updateUIStats();
-          showToast(t('stats_reset_toast') || '統計數據已重設為 0', 2000);
-        }
+        resetAllStats();
       };
     }
 

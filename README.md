@@ -1,15 +1,23 @@
 # ⚔️ RO Survivors Helper (RO 生存者智能輔助助手)
 
+> [!WARNING]
+> ### ⚠️ 重要風險聲明 / Important Risk Warning
+> **使用本輔助程式可能存在被遊戲官方偵測或帳號封鎖（Ban）之風險。**  
+> 本工具僅供前端網頁技術研究、無障礙操作輔助 (Accessibility) 與學習交流使用。請使用者自行評估並承擔使用本腳本所衍生之任何帳號處分、角色封鎖或數據變動風險，開發者概不對任何帳號損失承擔責任。  
+> 
+> **Using this helper script carries the inherent risk of account detection, restriction, or permanent ban.**  
+> This project is intended strictly for educational, accessibility, and frontend automation research purposes. Users assume full responsibility and risk for their own game accounts when using this software.
+
 <div align="center">
 
 <img src="logo.webp" alt="Martian Rabbit Logo" width="160" style="border-radius: 20px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); margin-bottom: 14px;" />
 
-[![Version](https://img.shields.io/badge/Version-2.0.5-blue.svg?style=for-the-badge)](https://github.com/hijacker4163/ro-survivors-helper)
+[![Version](https://img.shields.io/badge/Version-2.0.6-blue.svg?style=for-the-badge)](https://github.com/hijacker4163/ro-survivors-helper)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-Buy%20Me%20a%20Coffee-ff5f5f.svg?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/martianrabbit)
 
-**🐰 An advanced Quality-of-Life (QoL) and automation helper for *RO Survivors*!**  
-**專為《RO Survivors (仙境傳說生存者)》打造的全功能生活品質改善 (QoL) 與自動化輔助腳本！**
+**🐰 An advanced automation & QoL helper for RO Survivors (Auto-farm, Party sync, Festival loop, Skills & Items strategy) — now fully supports both Official & HANS TW versions!**  
+**專為 RO Survivors 打造的智能自動掛機與輔助工具，自 2.0.5 起全面同步支援台版 HANS 與國際原版（支援自動刷活動、退隊重組、詞綴選卡與關卡道具配置）！**
 
 [English](#english) | [繁體中文](#繁體中文) | [更新日誌 / Changelog](CHANGELOG.md) | [免責聲明 / Disclaimer](#-免責聲明--disclaimer)
 
@@ -23,7 +31,10 @@
 ### 📖 Overview
 **RO Survivors Helper** is a lightweight, high-performance browser userscript / console tool designed to provide Quality-of-Life (QoL) automations for the fan-made AI game *RO Survivors*. It handles repetitive lobby navigation, party coordination, intelligent card/skill selection, item/deity configuration, and auto-settlement.
 
+> **💡 Multi-Server Support (v2.0.5+)**: Seamlessly compatible with both the **Global Official version** ([ro-survivors.com](https://ro-survivors.com)) and the **Taiwan HANS version** ([ro.hans-webgametw.com](https://ro.hans-webgametw.com)), featuring automatic domain detection, stage database mapping, and server-specific NPC interaction!
+
 ### ✨ Key Features
+- 🌐 **Multi-Server Adapter (Official & HANS TW)**: Since **v2.0.5**, fully supports both the Global Official version and Taiwan HANS version. Automatically detects active domain, maps all 17 custom HANS dungeon stages, supports "Captain" dialogue navigation, and dynamically optimizes NPC buttons for each server environment.
 - 🌐 **Bilingual (ZH/EN) Language Switching**: Seamless one-click toggling between Traditional Chinese and English directly from the floating header (Default: Traditional Chinese), with full UI and modal localization.
 - 🏮 **Automated Festival Loop (Louyang)**: Built-in safe waypoint navigation (South ➔ East ➔ North) avoiding central fountain collision, enabling 24/7 seamless festival dungeon grinding.
 - 👥 **Smart Party System & Auto Re-Party**:
@@ -33,7 +44,7 @@
   - Strict lobby readiness watchdog (checks channel, plaza presence, and 5s safe sync period).
 - 🏃 **Battle Auto-Movement & Smart Looting Engine**: Three specialized movement modes: "Smart Looting" (pathfinds to magnets, meat, gems, equipment), "Orbital Kiting" (dynamic perimeter kiting around anchor), and "Stationary Defense" (stands ground, loots immediate vicinity). Built-in chest affordability check and anti-stuck safe distance.
 - 🎲 **Smart Reroll (Single Card then Reroll All)**: When no focused skills appear on level-up, prioritizes single-card reroll on non-focused cards first. If single-card rerolls are exhausted, automatically activates "Reroll All" (Reroll Deck).
-- 🛡️ **Anti-Cheat Defang & Stealth Shield**: Prototypes-level neutralization of in-game `springTrap()` cheat monsters, permanent lock of `trapAt = -1` preventing instant-kill checks, network-level drop of `POST /env` reports, and silent native event execution.
+- 🛡️ **Anti-Cheat Defang & 10D Behavioral Stealth Shield**: Prototypes-level neutralization of in-game `springTrap()` cheat monsters, permanent lock of `trapAt = -1` preventing instant-kill checks, network-level drop of `POST /env` reports, 10-dimensional humanized settlement telemetry (`pt`), and native function signatures spoofing (`toString`).
 - 🎒 **In-Run Items & Deity Strategy (Smart Anti-Slot Occupation)**:
   - Comprehensive database of **51 in-run items** (Potions, Elixirs, Blessings, Dishes, Deities) crawled directly from the game wiki.
   - **1-Click Presets**: "⭐ Recommended Core" and "💰 Loot Farming (Zeny / Discovery / Luck / Plenty)".
@@ -64,7 +75,10 @@
 ### 📖 專案簡介
 **RO Survivors Helper (RO 生存者智能輔助助手)** 是一套輕量、高效且功能齊全的瀏覽器油猴腳本 / 主控台輔助工具，專為同人二創遊戲《RO Survivors》打造。大幅減少重複操作負擔，提供智能選卡、大廳自動組隊、燈籠節活動循環、關卡道具神祇策略等全方位功能。
 
+> **💡 雙伺服器全面同步支援 (v2.0.5+)**：自 **v2.0.5** 起，本輔助程式已全面同步支援**國際原版 ([ro-survivors.com](https://ro-survivors.com))** 與 **台版 HANS ([ro.hans-webgametw.com](https://ro.hans-webgametw.com))**！程式啟動時自動動態辨識站點，台版專屬全 17 關特色副本數據與 NPC 尋路導航完全無縫相容！
+
 ### ✨ 核心功能特色
+- 🌐 **雙伺服器環境架構自動適配 (國際原版 / 台版 HANS)**：自 **v2.0.5** 起全面支援雙伺服器環境！自動辨識運行站點（國際原版 `ro-survivors.com` vs 台版 HANS `ro.hans-webgametw.com`），深度適配台版全 17 關特色副本關卡數據、支援台版「船長」對話出發導航，並依伺服器環境自動優化專屬 NPC 面板按鈕，兩大版本無縫切換！
 - 🌐 **中英雙語系即時切換**：懸浮面板頂部一鍵即時切換繁體中文與英文介面（預設繁體中文），所有控制項、設定彈窗與提示訊息均完整本地化。
 - 🏮 **洛陽燈籠節活動全自動循環**：內建普隆德拉廣場絕對避水池航點導航（南1 ➔ 東11 ➔ 北7），徹底告別卡水池問題，全自動無縫刷扭蛋！
 - 👥 **智慧組隊與自動退隊重組 (Auto Re-Party)**：
@@ -81,11 +95,11 @@
   - 升級選卡畫面上無任何專注技能時，第一順位優先使用「單張重刷」，逐張刷新非專注技能。
   - 若單張重刷次數用盡仍無專注技能，第二順位自動使用『重刷全部』(Reroll All / Reroll deck)。
   - 面板內建獨立開關，選卡歷史紀錄完整標記每一步重刷軌跡。
-- 🛡️ **全方位反作弊陷阱瓦解與金鐘罩防護 (Anti-Cheat Defang & Stealth Shield)**：
+- 🛡️ **全方位反作弊陷阱瓦解與十維遙測金鐘罩 (Anti-Cheat Defang & 10D Stealth Shield)**：
   - 原型鏈全面拔除 `springTrap()` 惡魔怪物陷阱，惡意 BOSS 召喚與「偵測到使用外掛」警報徹底無效化。
   - 透過 `Object.defineProperty` 將 `trapAt` 與 `trapShotAt` 死鎖為 `-1`，杜絕即死判定與截圖舉報。
-  - 選卡事件優先以原生 JS `onclick` 執行，杜絕向 window 派發非原生 DOM 合成事件，反作弊計數器永遠歸零。
-  - 網路層封鎖 `POST /env` 作弊封包，偽裝 `POST /op` 結算遙測數據為真實人類常態分佈。
+  - 選卡事件優先以原生 JS `onclick` 執行並加入隨機安全偏移（避免正中心 1px 點擊被計數），杜絕向 window 派發非原生 DOM 合成事件。
+  - 網路層封鎖 `POST /env` 作弊舉報封包，結算 `POST /op` 智能偽裝最新 10 維真人指紋遙測數據（`Zv=0, Qv=0` 杜絕機器人特徵）。
 - 🎒 **關卡內 51 種道具與神祇配置彈窗（智慧避佔位引擎）**：
   - 完整收錄藥水 (12種)、秘藥 (10種)、祝福 (10種)、料理 (6種)、神祇 (13種) 權威資料庫。
   - **快捷預設**：一鍵配置「⭐ 推薦核心專注」與「💰 打寶專注（金幣/尋寶/驚奇/豐饒/幸運/採集）」。
