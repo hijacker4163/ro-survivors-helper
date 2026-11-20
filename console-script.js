@@ -1,10 +1,10 @@
-// RO Survivors 控制中心即貼即用腳本 v2.0.6
+// RO Survivors 控制中心即貼即用腳本 v2.0.7
 // 使用方式：進入遊戲大廳或戰鬥中，按 F12 打開 Console，整段貼上並按 Enter 即可啟動！
 // -------------------------------------------------------------
 (function () {
   'use strict';
 
-  const SCRIPT_VERSION = '2.0.6';
+  const SCRIPT_VERSION = '2.0.7';
 
   let activeBattleGameInstance = null;
   let lastBattleWon = null;
@@ -2827,6 +2827,20 @@
     const isFrameVisible = partyFrame && !partyFrame.classList.contains('hidden') && partyFrame.style.display !== 'none';
     const rows = partyFrame ? Array.from(partyFrame.querySelectorAll('.pf-row')) : [];
 
+    // 關鍵保護：若使用者完全未開啟組隊功能，且遊戲畫面上沒有 >1 人的實體隊伍，強制判定為單人模式
+    if (!config.partyEnabled && !config.autoReParty) {
+      if (!isFrameVisible || rows.length <= 1) {
+        wasInParty = false;
+        return {
+          inParty: false,
+          isLeader: false,
+          ready: true,
+          memberCount: rows.length,
+          reason: '單人模式 (未開啟組隊)'
+        };
+      }
+    }
+
     const timeSinceLobby = lobbyEnteredAt > 0 ? (performance.now() - lobbyEnteredAt) : 999999;
 
     // 1. 若畫面上有隊伍面板且成員大於 1 人，記錄處於組隊狀態
@@ -2834,8 +2848,8 @@
       wasInParty = true;
     } else {
       // 隊伍面板不存在或只有自己一人在隊伍框中 (無隊伍或單人模式)
-      // 關鍵保護：若上一局為組隊，或設定為隊長且有勾選隊友，在方案A(60s)/未重組(120s)緩衝期內，絕不准誤判為單人模式！
-      const isConfiguredParty = wasInParty || (config.partyRole === 'leader' && (config.partyInviteFriends?.length || 0) > 0);
+      // 關鍵保護：必須在開啟組隊功能的前提下，若上一局為組隊，或設定為隊長且有勾選隊友，才在緩衝期內等待隊伍同步！
+      const isConfiguredParty = (config.partyEnabled || config.autoReParty) && (wasInParty || (config.partyRole === 'leader' && (config.partyInviteFriends?.length || 0) > 0));
       const partyWaitLimit = config.autoReParty ? SCHEME_A_WAIT_MEMBERS_TIMEOUT_MS : SCHEME_A_NO_REPARTY_SOLO_TIMEOUT_MS;
       if (isConfiguredParty && timeSinceLobby < partyWaitLimit) {
         const sec = Math.max(1, Math.ceil((partyWaitLimit - timeSinceLobby) / 1000));
@@ -3310,57 +3324,62 @@
 
     // 0. 大廳安全冷卻與隊友狀態同步檢查 (Lobby Safety Cooldown & Party Readiness)
     if (state === 'LOBBY') {
+      const isPartyActive = (config.partyEnabled || config.autoReParty) && wasInParty;
       const timeSinceLobby = performance.now() - lobbyEnteredAt;
-      const cooldownMs = wasInParty ? LOBBY_POST_RUN_COOLDOWN_MS : 2000;
+      const cooldownMs = isPartyActive ? LOBBY_POST_RUN_COOLDOWN_MS : 2000;
       if (lobbyEnteredAt > 0 && timeSinceLobby < cooldownMs) {
         const waitSec = Math.max(1, Math.ceil((cooldownMs - timeSinceLobby) / 1000));
-        updateStatus(wasInParty ? `🏰 剛返回大廳，等待隊友狀態同步 (剩餘 ${waitSec} 秒)...` : `🏰 剛返回大廳，等待就緒 (${waitSec} 秒)...`);
-        showToast(wasInParty ? `🏰 剛返回大廳，等待隊友同步中 (${waitSec}s)...` : `🏰 剛返回大廳，準備中 (${waitSec}s)...`, 1200);
+        updateStatus(isPartyActive ? `🏰 剛返回大廳，等待隊友狀態同步 (剩餘 ${waitSec} 秒)...` : `🏰 剛返回大廳，等待就緒 (${waitSec} 秒)...`);
+        showToast(isPartyActive ? `🏰 剛返回大廳，等待隊友同步中 (${waitSec}s)...` : `🏰 剛返回大廳，準備中 (${waitSec}s)...`, 1200);
         return;
       }
 
-      const partyStatus = checkPartyReadiness();
-      // 若在隊伍中且為隊長，但隊友未全數就緒：檢查是否逾時防死迴圈
-      if (partyStatus.inParty && partyStatus.isLeader && !partyStatus.ready) {
-        releaseAllMovementKeys();
-        if (!leaderWaitReadySince) leaderWaitReadySince = performance.now();
-        const elapsed = performance.now() - leaderWaitReadySince;
-        const waitLimit = config.autoReParty ? SCHEME_A_WAIT_MEMBERS_TIMEOUT_MS : SCHEME_A_NO_REPARTY_SOLO_TIMEOUT_MS;
-        if (elapsed < waitLimit) {
-          const sec = Math.max(1, Math.ceil((waitLimit - elapsed) / 1000));
-          updateStatus(`⏳ [隊長待命] 等待隊友回到廣場... ${partyStatus.reason} (防卡死倒數 ${sec}s)`);
-          return;
-        } else {
-          // 隊友超時未就緒，自動退隊單人出發自救
-          console.warn('[RO Controller] 🚨 隊友超過時限未在廣場就緒！退出隊伍單人出發防卡死！');
-          updateStatus('🚪 [隊長防卡死] 隊員超時未就緒，退出隊伍單人出發！');
-          showToast('⚠️ [隊長防卡死] 隊友超時未就緒，退出隊伍單人出發！', 3500);
-          leaveParty();
-          wasInParty = false;
-          leaderWaitReadySince = 0;
+      if (config.partyEnabled || config.autoReParty) {
+        const partyStatus = checkPartyReadiness();
+        // 若在隊伍中且為隊長，但隊友未全數就緒：檢查是否逾時防死迴圈
+        if (partyStatus.inParty && partyStatus.isLeader && !partyStatus.ready) {
+          releaseAllMovementKeys();
+          if (!leaderWaitReadySince) leaderWaitReadySince = performance.now();
+          const elapsed = performance.now() - leaderWaitReadySince;
+          const waitLimit = config.autoReParty ? SCHEME_A_WAIT_MEMBERS_TIMEOUT_MS : SCHEME_A_NO_REPARTY_SOLO_TIMEOUT_MS;
+          if (elapsed < waitLimit) {
+            const sec = Math.max(1, Math.ceil((waitLimit - elapsed) / 1000));
+            updateStatus(`⏳ [隊長待命] 等待隊友回到廣場... ${partyStatus.reason} (防卡死倒數 ${sec}s)`);
+            return;
+          } else {
+            // 隊友超時未就緒，自動退隊單人出發自救
+            console.warn('[RO Controller] 🚨 隊友超過時限未在廣場就緒！退出隊伍單人出發防卡死！');
+            updateStatus('🚪 [隊長防卡死] 隊員超時未就緒，退出隊伍單人出發！');
+            showToast('⚠️ [隊長防卡死] 隊友超時未就緒，退出隊伍單人出發！', 3500);
+            leaveParty();
+            wasInParty = false;
+            leaderWaitReadySince = 0;
+            return;
+          }
+        }
+
+        // 若在隊伍中但不是隊長，隊員不應主動走向 NPC 開啟地圖，應等待隊長發起
+        if (partyStatus.inParty && !partyStatus.isLeader) {
+          releaseAllMovementKeys();
+          updateStatus('🤝 處於組隊中 (隊員)，等待隊長發起出發...');
           return;
         }
-      }
-
-      // 若在隊伍中但不是隊長，隊員不應主動走向 NPC 開啟地圖，應等待隊長發起
-      if (partyStatus.inParty && !partyStatus.isLeader) {
-        releaseAllMovementKeys();
-        updateStatus('🤝 處於組隊中 (隊員)，等待隊長發起出發...');
-        return;
       }
     }
 
     // 1. 燈籠節專屬活動視窗 (Festival Window)
     if (state === 'FESTIVAL_WINDOW') {
-      const partyStatus = checkPartyReadiness();
-      if (partyStatus.inParty && partyStatus.isLeader && !partyStatus.ready) {
-        updateStatus(`⏳ [隊長待命] 等待隊友回到廣場... ${partyStatus.reason}`);
-        showToast(`⏳ 等待隊友: ${partyStatus.reason}`, 2500);
-        return;
-      }
-      if (partyStatus.inParty && !partyStatus.isLeader) {
-        updateStatus('🤝 處於組隊中 (隊員)，等待隊長啟程...');
-        return;
+      if (config.partyEnabled || config.autoReParty) {
+        const partyStatus = checkPartyReadiness();
+        if (partyStatus.inParty && partyStatus.isLeader && !partyStatus.ready) {
+          updateStatus(`⏳ [隊長待命] 等待隊友回到廣場... ${partyStatus.reason}`);
+          showToast(`⏳ 等待隊友: ${partyStatus.reason}`, 2500);
+          return;
+        }
+        if (partyStatus.inParty && !partyStatus.isLeader) {
+          updateStatus('🤝 處於組隊中 (隊員)，等待隊長啟程...');
+          return;
+        }
       }
 
       const btnPlay = document.getElementById('festival-play');
@@ -3376,15 +3395,17 @@
 
     // 2. 關卡清單視窗 (Stages Window)
     if (state === 'STAGES_WINDOW') {
-      const partyStatus = checkPartyReadiness();
-      if (partyStatus.inParty && partyStatus.isLeader && !partyStatus.ready) {
-        updateStatus(`⏳ [隊長待命] 等待隊友回到廣場... ${partyStatus.reason}`);
-        showToast(`⏳ 等待隊友: ${partyStatus.reason}`, 2500);
-        return;
-      }
-      if (partyStatus.inParty && !partyStatus.isLeader) {
-        updateStatus('🤝 處於組隊中 (隊員)，等待隊長啟程...');
-        return;
+      if (config.partyEnabled || config.autoReParty) {
+        const partyStatus = checkPartyReadiness();
+        if (partyStatus.inParty && partyStatus.isLeader && !partyStatus.ready) {
+          updateStatus(`⏳ [隊長待命] 等待隊友回到廣場... ${partyStatus.reason}`);
+          showToast(`⏳ 等待隊友: ${partyStatus.reason}`, 2500);
+          return;
+        }
+        if (partyStatus.inParty && !partyStatus.isLeader) {
+          updateStatus('🤝 處於組隊中 (隊員)，等待隊長啟程...');
+          return;
+        }
       }
 
       const stgGo = document.getElementById('stg-go');
@@ -3603,19 +3624,21 @@
       const primaryBtn = document.querySelector('#npc-options button.primary');
       if (primaryBtn && !primaryBtn.classList.contains('hidden')) {
         const btnText = (primaryBtn.textContent || '').toLowerCase();
-        const partyStatus = checkPartyReadiness();
+        if (config.partyEnabled || config.autoReParty) {
+          const partyStatus = checkPartyReadiness();
 
-        // 防呆保護：若當前確實在隊伍中，但出發按鈕仍顯示單人 (Ir al campo)，
-        // 說明隊伍 WebSocket 尚未向此視窗同步，嚴禁點擊，防止隊長一人進入拋棄隊友！
-        if (partyStatus.inParty && (btnText.includes('campo') || btnText.includes('單人'))) {
-          updateStatus('⚠️ 偵測到組隊中，但出發按鈕仍顯示單人 (Ir al campo)，等待隊伍刷新提議...');
-          showToast('⚠️ 等待隊伍狀態同步 (防止誤進單人)...', 2000);
-          return;
-        }
-        if (partyStatus.inParty && partyStatus.isLeader && !partyStatus.ready) {
-          updateStatus(`⏳ [隊長待命] 等待隊友回到廣場... ${partyStatus.reason}`);
-          showToast(`⏳ 等待隊友就緒: ${partyStatus.reason}`, 2500);
-          return;
+          // 防呆保護：若當前確實在隊伍中，但出發按鈕仍顯示單人 (Ir al campo)，
+          // 說明隊伍 WebSocket 尚未向此視窗同步，嚴禁點擊，防止隊長一人進入拋棄隊友！
+          if (partyStatus.inParty && (btnText.includes('campo') || btnText.includes('單人'))) {
+            updateStatus('⚠️ 偵測到組隊中，但出發按鈕仍顯示單人 (Ir al campo)，等待隊伍刷新提議...');
+            showToast('⚠️ 等待隊伍狀態同步 (防止誤進單人)...', 2000);
+            return;
+          }
+          if (partyStatus.inParty && partyStatus.isLeader && !partyStatus.ready) {
+            updateStatus(`⏳ [隊長待命] 等待隊友回到廣場... ${partyStatus.reason}`);
+            showToast(`⏳ 等待隊友就緒: ${partyStatus.reason}`, 2500);
+            return;
+          }
         }
 
         updateStatus('⚙️ 出發確認：點擊確認進入地圖...');
@@ -5299,7 +5322,9 @@
     const glRows = Array.from(serverLoot.querySelectorAll('.gl-row'));
     if (glRows.length === 0) return;
 
-    wasInParty = true;
+    if (config.partyEnabled || config.autoReParty) {
+      wasInParty = true;
+    }
 
     // 檢查是否還有尚未選擇的項目 (存在可點擊且非蜜罐的 .gl-btns button)
     const hasUnpicked = Array.from(serverLoot.querySelectorAll('.gl-btns button')).some(b => !isDecoyElement(b));
@@ -5377,7 +5402,9 @@
     // 2. 若為組隊實時擲骰按鈕群 (.dr-roll-btns)
     const rollBtns = dropReveal.querySelector('.dr-roll-btns');
     if (rollBtns) {
-      wasInParty = true;
+      if (config.partyEnabled || config.autoReParty) {
+        wasInParty = true;
+      }
       const isLegendary = dropReveal.querySelector('.q4, .card, [style*="color"]') !== null ||
                           /legend|傳奇|傳說|card|carta|卡片|egg|huevo/i.test(dropReveal.textContent || '');
       if (config.lootRollMode === 'greed_need_legendary' && isLegendary) {

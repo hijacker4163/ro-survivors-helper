@@ -5,7 +5,7 @@
 <div align="center">
 
 [![Buy Me a Coffee](https://img.shields.io/badge/Ko--fi-請兔子喝杯咖啡-ff5e5b?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/martianrabbit)
-[![Version](https://img.shields.io/badge/Version-2.0.6-blue.svg?style=for-the-badge)](https://github.com/hijacker4163/ro-survivors-helper)
+[![Version](https://img.shields.io/badge/Version-2.0.7-blue.svg?style=for-the-badge)](https://github.com/hijacker4163/ro-survivors-helper)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 
 **🐰 位於南半球從火星下來的兔子程式員 (Martian Rabbit) 精心打造 🚀**  
@@ -13,6 +13,22 @@
 👉 **[點此贊助請喝咖啡 (Ko-fi)](https://ko-fi.com/martianrabbit)**
 
 </div>
+
+---
+
+## 🚀 v2.0.7 (2026-11-20) - 修復未開啟組隊開關時誤卡關卡選擇與隊長待命問題
+
+### 🌟 核心更新與修復
+
+#### 1. 👥 組隊就緒嚴格綁定開關狀態 (Fix False Party Wait on Solo)
+- **排除單人模式下的誤判等待**：
+  - 徹底修復 `checkPartyReadiness()` 在判定隊長配置 (`isConfiguredParty`) 時未檢查組隊總開關（`partyEnabled`）的重大缺陷。
+  - 當玩家**未開啟組隊開關**（`!config.partyEnabled && !config.autoReParty`）且畫面上無實體多人群組時，100% 強制判定為單人模式並即時重置 `wasInParty = false`，杜絕因歷史好友名單觸發 120 秒方案 A 隊伍等待。
+- **全流程視窗出發防護全面連動開關**：
+  - 在關卡清單視窗（`STAGES_WINDOW`）、洛陽燈籠節（`FESTIVAL_WINDOW`）、大廳出發導航（`handleEnterMap`）與出發確認彈窗（`NPC_DIALOG`）中，僅在玩家明確開啟組隊功能時才進行隊友同步攔截。
+  - 徹底解決關卡清單開啟時一直顯示「等待隊友回到廣場」並阻擋選取關卡與點擊啟程（Partir）的問題。
+- **戰鬥掉寶狀態防呆**：
+  - 結算分寶與掉落揭示僅在組隊模式下標記 `wasInParty = true`，避免單人戰鬥後誤入組隊大廳冷卻。
 
 ---
 
