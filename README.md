@@ -1,4 +1,4 @@
-# ⚔️ RO Survivors Helper (RO 生存者智能輔助助手)
+# ⚔️ RO Survivors Helper (RO 倖存者智能輔助助手、腳本、外掛)
 
 > [!WARNING]
 > ### ⚠️ 重要風險聲明 / Important Risk Warning
