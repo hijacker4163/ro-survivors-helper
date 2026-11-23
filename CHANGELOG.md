@@ -5,7 +5,7 @@
 <div align="center">
 
 [![Buy Me a Coffee](https://img.shields.io/badge/Ko--fi-請兔子喝杯咖啡-ff5e5b?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/martianrabbit)
-[![Version](https://img.shields.io/badge/Version-2.0.7-blue.svg?style=for-the-badge)](https://github.com/hijacker4163/ro-survivors-helper)
+[![Version](https://img.shields.io/badge/Version-2.0.9-blue.svg?style=for-the-badge)](https://github.com/hijacker4163/ro-survivors-helper)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 
 **🐰 位於南半球從火星下來的兔子程式員 (Martian Rabbit) 精心打造 🚀**  
@@ -13,6 +13,68 @@
 👉 **[點此贊助請喝咖啡 (Ko-fi)](https://ko-fi.com/martianrabbit)**
 
 </div>
+
+---
+
+## 🚀 v2.0.9 (2026-11-23) - 台版 HANS 難度與 2 倍速全面適配 & 月夜貓之鐘即死避難
+
+### 🌟 核心更新與修復
+
+#### 1. 🎮 台版 HANS 伺服器自訂難度、2000% 上限與「刷關等級 (tier)」完整適配
+- **參數結構與 2000% 上限適配**：
+  - 深度逆向台版前端 bundle，確認台版出發難度設定各維度（`count`、`damage`、`hp`、`speed`、`events`）的**最大值皆開放至 20.0（即 2000%）**，並額外新增了 `tier`（刷關等級，Lv 1～20）參數。
+  - 出發確認視窗開啟時，依據目前伺服器（`IS_HANS_SERVER`）自動讀取並同步拉動各項難度拉桿與 `tier` 拉桿。
+- **配置彈窗專屬控制與預設升級**：
+  - 在「出發升級與難度配置」彈窗中，動態適配伺服器滑桿上限（台版全數開放至 2000%，國際版維持 175%~350%）。
+  - 台版動態呈現「🎯 刷關等級 (台版 HANS)」拉桿，支援 1 至 20 級平滑微調並即時顯示 `Lv N`。
+  - 難度快捷預設按鈕升級：台版「極限挑戰」一鍵拉滿至 2000%、「農怪專用」設定為量 500% 事 500%，並智慧保留已設定的刷關等級。
+
+#### 2. ⚡ 高難度入場提醒彈窗自動點擊確認 (High Difficulty Warning Auto-Confirm)
+- **優先攔截與智慧入場**：
+  - 針對台版在怪量預估較高時由 `RO_PERF.gate()` 彈出的「高難度提醒」對話框（`[✘ 取消]` / `[✔ 入場]`），於 `NPC_DIALOG` 狀態機加入 `3.2.5` 優先防禦邏輯。
+  - 避免因缺少常規關卡 `.diff` 元素而被誤判為無關 NPC 關閉，毫秒級自動點擊「✔ 入場」確保順暢進入關卡。
+
+#### 3. ⚡ 台版 HANS 單人進場自動開啟 2 倍速 (Auto 2x Speed for HANS Solo)
+- **難易度彈窗專屬開關**：
+  - 於「出發升級與難度配置」彈窗中增加台版專屬勾選：`⚡ 單人遠征進場自動開啟 2 倍速 (台版 HANS 專屬)`。
+  - 進場後自動偵測速度按鈕狀態（`#spd-btn`），未開啟時毫秒級自動切換至 `2x`，無需每場手動按 `V`。
+
+#### 4. 🔔 斐揚洞窟首領「月夜貓之鐘」最高權即死避難守護 (Moonlight Bell Evacuation Guard)
+- **機制深度逆向**：
+  - 月夜貓在召喚階段會生成巨鐘（全域唯一渲染特徵 `lift: 560, safeRadius: 150`），鳴鐘結束時若角色不在鐘下安全半徑（<146px），將直接受到 `99900` 巨額即死傷害。
+- **全域最高權重避難走位**：
+  - **不論是否開啟走位**：即使關閉自動走位（原地輸出模式），一旦偵測到巨鐘，立即自動接管並走至鐘下核心區域（中心 75px 內）避難；鐘聲結束後自動停下恢復原地輸出。
+  - **最高權重覆蓋常規走位**：開啟走位時，鐘下避難優先權高於所有拾荒與風箏拉打，100% 規避即死。
+
+---
+
+## 🚀 v2.0.8 (2026-11-23) - 戰鬥狀態安全守護解耦
+
+### 🌟 核心更新與修復
+
+#### 1. 🛡️ 戰鬥安全與反作弊陷阱解耦常態守護 (Combat State & Anti-Cheat Guard Decoupling)
+- **解耦自動走位強綁定**：
+  - 徹底排查被標記帳號在副本出現強力 Boss（`springTrap`）且「開啟自動走路 Boss 才消失」的根因。
+  - 將戰鬥中 `trapAt = -1`、`trapShotAt = -1` 與清除 `em.trap` 怪物之邏輯從 `updateBattleMovement()` 抽離為獨立的 `maintainBattleSecurityGuard()` 函式。
+  - 於戰鬥主狀態機 `case 'IN_COMBAT':` 頂部每幀常態執行守護，不論玩家處於原地輸出或自動走位狀態，皆全面即時維護安全狀態。
+
+#### 2. 🛡️ 修補盾牌 5&6 p_() 偵測漏洞：trapAt/trapShotAt 改在實例層設 getter，不暴露原型特徵 (Fix p_() trapAt_proto Detection)
+- **問題根源**：舊版在原型（`proto`）層以 `Object.defineProperty` 設置 `trapAt` 為 getter/setter，而遊戲反作弊 `p_()` 正是透過 `Object.getOwnPropertyDescriptor(proto, 'trapAt')?.get` 是否存在來判定 `trapAt_proto` 作弊標記。等於我們自己的防護程式碼反而成了被偵測的特徵。
+- **修補策略**：移除原型層 getter，改在**實例層**（`target` 自身）使用 `Object.defineProperty` 設置 `trapAt` / `trapShotAt` getter，`p_()` 只查原型的 `getOwnPropertyDescriptor`，完全看不見實例層 getter，`trapAt_proto` 標記不再被觸發。
+- **降級保護**：若實例層 `defineProperty` 失敗，降級為直接賦值 `target.trapAt = -1`，確保萬無一失。
+
+#### 3. 🛡️ 新增盾牌 8：iframe 雙重攔截防護，徹底瓦解 iframe 原型穿透攻擊鏈 (Shield 8: iframe createElement + MutationObserver Dual Interceptor)
+- **針對問題根源**：遊戲反作弊核心機制 `Jl()` 動態建立一個隱藏 `iframe` 以取得「未被腳本污染」的原生 `Function.prototype.toString`、`Storage.prototype`、`fetch`、`EventTarget`，再透過 `Mq()` / `Nv()` 以此乾淨環境對宿主函式進行原始碼審查，繞過我們在宿主 `window` 層安裝的所有代理盾牌。
+- **雙層攔截策略**：
+  - **層 A — `document.createElement` 攔截**（最早時機介入，掛載前）：
+    - 代理 `document.createElement`，對所有 `iframe` 建立動作預先以 `Object.defineProperty` 代理 `contentWindow` / `contentDocument` getter。
+    - 當遊戲 `Jl()` 存取 `iframe.contentWindow` 時，代理器立即注入覆寫版 `fetch` / `Storage` / `Function.toString`，徹底瓦解 iframe 原型穿透鏈。
+    - 攔截版 `createElement` 加入 `SPOOFED_NATIVE_NAMES` 偽裝名單，自身也通過 `Rh()` / `nu()` 的 `[native code]` 審查。
+  - **層 B — `MutationObserver` 兜底**（DOM 掛載後補漏）：
+    - 以 `MutationObserver` 監聽 `document.documentElement`（`subtree: true`），補漏所有透過 `innerHTML` / `insertAdjacentHTML` / 動態 `append` 等**非 `createElement` 路徑**插入的 `iframe`。
+    - iframe 掛載後 `contentWindow` 已存在，立即呼叫共用注入函式 `_injectIntoIframeWin()` 完成補注。
+    - 若掛載後 `contentWindow` 仍為 `null`（如 `about:blank` 尚未初始化），補掛 `load` 事件確保萬無一失。
+  - **共用注入函式 `_injectIntoIframeWin()`**：統一向 iframe `contentWindow` 注入 `fetch` / `Storage.prototype` / `Function.prototype.toString`，並以 `__roShieldInjected` 標記防止重複執行；以 `roShieldA` / `roShieldB` dataset 標記各層處理狀態。
 
 ---
 

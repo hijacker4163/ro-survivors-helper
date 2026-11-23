@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  const SCRIPT_VERSION = '2.0.8';
+  const SCRIPT_VERSION = '2.0.9';
 
   let activeBattleGameInstance = null;
   let lastBattleWon = null;
@@ -221,24 +221,34 @@
               proto.__trapShielded = true;
               proto.springTrap = function () {
                 console.warn('[RO Shield] 🛑 成功攔截並瓦解遊戲反作弊 springTrap()！惡意怪物召喚與即死懲罰已徹底失效！');
+                // 🛡️ 修補 p_() 偵測漏洞：直接在實例層賦值，不在原型層留下 getter 特徵
                 this.trapAt = -1;
                 this.trapShotAt = -1;
               };
-              try {
-                Object.defineProperty(proto, 'trapAt', {
-                  get: () => -1,
-                  set: () => {},
-                  configurable: true
-                });
-                Object.defineProperty(proto, 'trapShotAt', {
-                  get: () => -1,
-                  set: () => {},
-                  configurable: true
-                });
-              } catch (e) {}
+              // ⚠️ 刻意不在 proto 層設 trapAt/trapShotAt 的 getter/setter！
+              // p_() 偵測邏輯：Object.getOwnPropertyDescriptor(proto, 'trapAt')?.get 存在 → 判定 trapAt_proto
+              // 若在原型設 getter，反而暴露自己的存在。
             }
-            if (typeof target.trapAt === 'number') target.trapAt = -1;
-            if (typeof target.trapShotAt === 'number') target.trapShotAt = -1;
+            // 🛡️ 在實例層鎖定 trapAt / trapShotAt 為 -1（實例自身屬性，不影響原型鏈的 descriptor）
+            // p_() 只查原型的 getOwnPropertyDescriptor，查不到實例層 getter，完美繞過偵測
+            try {
+              Object.defineProperty(target, 'trapAt', {
+                get: () => -1,
+                set: () => {},
+                configurable: true,
+                enumerable: true
+              });
+              Object.defineProperty(target, 'trapShotAt', {
+                get: () => -1,
+                set: () => {},
+                configurable: true,
+                enumerable: true
+              });
+            } catch (e) {
+              // 降級：直接賦值（若 defineProperty 失敗）
+              try { target.trapAt = -1; } catch (e2) {}
+              try { target.trapShotAt = -1; } catch (e2) {}
+            }
           } catch (e) {}
         }
       }
@@ -295,6 +305,125 @@
           }
         }
       } catch (e) {}
+
+      // 🛡️ 盾牌 8：iframe 雙重攔截防護 (iframe createElement + MutationObserver Dual Interceptor)
+      // 雙重防護策略：
+      //   層 A — createElement 攔截：在 iframe 掛載到 DOM 前，預先代理 contentWindow / contentDocument
+      //          getter，讓遊戲 Jl() 存取 contentWindow 時拿到的是我們注入後的覆寫版原生函式。
+      //   層 B — MutationObserver 兜底：補漏 innerHTML / insertAdjacentHTML / appendChild 等不經過
+      //          createElement 的路徑；當 iframe 實際掛載到 DOM 後（contentWindow 此時不為 null），
+      //          立即再次注入，確保萬無一失。
+      // 兩層皆針對遊戲反作弊核心函式 Jl() / Mq() / Nv() / wq() 設計，徹底瓦解 iframe 原型穿透攻擊鏈。
+      try {
+        // ── 共用注入函式：向 iframe contentWindow 注入我們覆寫的原生函式 ──
+        const _injectIntoIframeWin = function (win) {
+          if (!win || win.__roShieldInjected) return;
+          try {
+            // 注入覆寫版 fetch：讓遊戲 wq() 透過 iframe fetch 發出的 POST /env 舉報也被攔截
+            if (win.fetch !== window.fetch) {
+              Object.defineProperty(win, 'fetch', { value: window.fetch, writable: true, configurable: true });
+            }
+            // 注入覆寫版 Storage：讓遊戲透過 iframe localStorage 寫入的 ro_gfx_cal 也被封印
+            if (win.localStorage && win.localStorage !== localStorage) {
+              try {
+                Object.defineProperty(win.localStorage.__proto__, 'getItem', { value: Storage.prototype.getItem, writable: true, configurable: true });
+                Object.defineProperty(win.localStorage.__proto__, 'setItem', { value: Storage.prototype.setItem, writable: true, configurable: true });
+              } catch (e2) {}
+            }
+            // 注入覆寫版 Function.prototype.toString：讓原始碼審查 Mq() 看到 [native code]
+            if (win.Function && win.Function.prototype.toString !== Function.prototype.toString) {
+              try {
+                Object.defineProperty(win.Function.prototype, 'toString', { value: Function.prototype.toString, writable: true, configurable: true });
+              } catch (e2) {}
+            }
+            // 標記已注入，防止重複執行
+            try { win.__roShieldInjected = true; } catch (e2) {}
+            console.log('[RO Shield] 🛡️ 成功向遊戲反作弊 iframe 注入防護覆寫環境！');
+          } catch (injectErr) {
+            // 跨來源限制或時序問題（iframe 尚未完成載入），靜默忽略
+          }
+        };
+
+        // ── 層 A：document.createElement 攔截器 ──
+        // 在 iframe 建立瞬間（掛載前）代理 contentWindow / contentDocument getter，
+        // 確保最早時機介入，不受掛載時序影響
+        const _origCreateElement = document.createElement.bind(document);
+        document.createElement = function (tagName, options) {
+          const el = _origCreateElement(tagName, options);
+          if (typeof tagName === 'string' && tagName.toLowerCase() === 'iframe') {
+            // 標記為已由層 A 處理，層 B 的 MutationObserver 看到此標記後仍可補注入
+            el.dataset.roShieldA = '1';
+
+            // 代理 contentWindow getter
+            Object.defineProperty(el, 'contentWindow', {
+              get() {
+                const win = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'contentWindow').get.call(this);
+                if (!win) return win; // iframe 尚未掛載，contentWindow 為 null，等 MutationObserver 層 B 補注
+                _injectIntoIframeWin(win);
+                return win;
+              },
+              configurable: true
+            });
+
+            // 同步代理 contentDocument，防止遊戲透過 contentDocument.defaultView 繞過上方代理
+            Object.defineProperty(el, 'contentDocument', {
+              get() {
+                const doc = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'contentDocument').get.call(this);
+                try { void el.contentWindow; } catch (e2) {} // 觸發 contentWindow 代理確保注入時機
+                return doc;
+              },
+              configurable: true
+            });
+          }
+          return el;
+        };
+        // 將攔截版 createElement 加入原生偽裝名單，通過 Rh() / nu() 的 [native code] 審查
+        SPOOFED_NATIVE_NAMES.set(document.createElement, 'createElement');
+
+        // ── 層 B：MutationObserver 兜底攔截器 ──
+        // 補漏所有非 createElement 路徑（innerHTML / insertAdjacentHTML / 動態 append）：
+        // 當 iframe 實際掛載到 DOM 後，contentWindow 已存在，可直接注入
+        const _iframeObserver = new MutationObserver((mutations) => {
+          for (const m of mutations) {
+            m.addedNodes.forEach((node) => {
+              if (!node || node.nodeType !== 1) return; // 只處理元素節點
+              // 收集此次新增節點中所有 iframe（含自身與後代）
+              const iframes = [];
+              if (node.tagName === 'IFRAME') {
+                iframes.push(node);
+              } else if (typeof node.querySelectorAll === 'function') {
+                node.querySelectorAll('iframe').forEach(f => iframes.push(f));
+              }
+              iframes.forEach((iframe) => {
+                if (iframe.dataset.roShieldB) return; // 已由層 B 處理過，跳過
+                iframe.dataset.roShieldB = '1';
+                // iframe 已掛載，contentWindow 應已可用，直接注入
+                try {
+                  const win = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'contentWindow').get.call(iframe);
+                  if (win) {
+                    _injectIntoIframeWin(win);
+                  } else {
+                    // 罕見情況：掛載後 contentWindow 仍為 null（如 about:blank 尚未初始化）
+                    // 監聽 load 事件再補注入
+                    iframe.addEventListener('load', function onIframeLoad() {
+                      iframe.removeEventListener('load', onIframeLoad);
+                      try {
+                        const w = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'contentWindow').get.call(iframe);
+                        if (w) _injectIntoIframeWin(w);
+                      } catch (e2) {}
+                    }, { once: true });
+                  }
+                } catch (e2) {}
+              });
+            });
+          }
+        });
+        // 監聽整個 document，使用 subtree 覆蓋所有子樹插入
+        _iframeObserver.observe(document.documentElement, { childList: true, subtree: true });
+
+      } catch (iframeHookErr) {
+        console.warn('[RO Shield] iframe 雙重攔截防護安裝異常:', iframeHookErr);
+      }
 
       console.log('[RO Shield] 🛡️ 全方位反作弊防護金鐘罩已成功啟動！');
     } catch (e) {
@@ -1527,13 +1656,15 @@
     targetStageIndex: -1,     // 相容舊版
     levelUpMode: 'instant',   // 升級方式: 'instant'(立即升級), 'accumulate'(累積升級)
     autoOpenBank: true,       // 累積模式下是否自動點擊開啟批次選卡 (按 B)
+    auto2xSpeed: IS_HANS_SERVER, // ⚡ 台版 HANS 單人進場自動開啟 2 倍速 (預設依伺服器開啟)
     customDiffEnabled: false, // 是否自訂關卡難度 (出發確認時自動同步)
     difficulty: {
-      count: 1.0,             // 敵人數量 1.0 ~ 3.5 (100% ~ 350%)
-      damage: 1.0,            // 敵人傷害 1.0 ~ 1.75 (100% ~ 175%)
-      hp: 1.0,                // 敵人生命 1.0 ~ 2.5 (100% ~ 250%)
-      speed: 1.0,             // 敵人速度 1.0 ~ 1.75 (100% ~ 175%)
-      events: 1.0             // 事件數量 1.0 ~ 2.5 (100% ~ 250%)
+      count: 1.0,             // 敵人數量 (國際版 1.0~3.5 / 台版 HANS 1.0~20.0 即 100%~2000%)
+      damage: 1.0,            // 敵人傷害 (國際版 1.0~1.75 / 台版 HANS 1.0~20.0 即 100%~2000%)
+      hp: 1.0,                // 敵人生命 (國際版 1.0~2.5 / 台版 HANS 1.0~20.0 即 100%~2000%)
+      speed: 1.0,             // 敵人速度 (國際版 1.0~1.75 / 台版 HANS 1.0~20.0 即 100%~2000%)
+      events: 1.0,            // 事件數量 (國際版 1.0~2.5 / 台版 HANS 1.0~20.0 即 100%~2000%)
+      tier: 1                 // 刷關等級 1~20 (台版 HANS 專屬，國際版無此欄)
     },
     minimized: false,         // 控制台最小化
     stats: {
@@ -1588,7 +1719,20 @@
         } else {
           merged.difficulty = Object.assign({}, defaultConfig.difficulty, merged.difficulty);
         }
+        // 台版 HANS 刷關等級防呆
+        if (!Number.isInteger(merged.difficulty.tier) || merged.difficulty.tier < 1 || merged.difficulty.tier > 20) {
+          merged.difficulty.tier = 1;
+        }
+        // 難度各項滑桿範圍防呆 (台版 HANS 支援 1.0~20.0 即 100%~2000%；國際版為 1.0~3.5)
+        const maxDiffAllowed = IS_HANS_SERVER ? 20.0 : 3.5;
+        for (const k of ['count', 'damage', 'hp', 'speed', 'events']) {
+          const v = Number(merged.difficulty[k]);
+          merged.difficulty[k] = (Number.isFinite(v) && v >= 1.0 && v <= maxDiffAllowed) ? v : 1.0;
+        }
 
+        if (typeof merged.auto2xSpeed !== 'boolean') {
+          merged.auto2xSpeed = IS_HANS_SERVER;
+        }
         if (typeof merged.autoAcceptPartyCheck !== 'boolean') {
           merged.autoAcceptPartyCheck = false;
         }
@@ -3568,6 +3712,34 @@
         }
       }
 
+      // 3.2.5 台版 HANS 專屬：自動確認「高難度提醒」彈窗 (點擊「✔ 入場」/ ✔ Enter)
+      // 注意：此視窗在調高難度按「前往野外」或「向隊伍提議」後由遊戲 RO_PERF.gate() 彈出，
+      // 內容為「此難度可能造成手機或電腦卡頓...」，標題為「高難度提醒」，
+      // 必須在 isDepartureDialog 之前優先截獲處理，否則會因視窗內無 .diff 元素而被當成無關 NPC 關閉！
+      if (IS_HANS_SERVER) {
+        const dialogTitle = (dialog.querySelector('#npc-title')?.textContent || dialog.querySelector('.npc-title')?.textContent || '').trim();
+        const dialogText = (dialog.textContent || '').toLowerCase();
+        const isHighDiffWarn = dialogTitle.includes('高難度提醒') || 
+                               dialogTitle.includes('High difficulty') || 
+                               dialogTitle.includes('Dificultad alta') ||
+                               dialogText.includes('此難度可能造成') ||
+                               dialogText.includes('高難度提醒') ||
+                               (dialogText.includes('卡頓') && dialogText.includes('效能模式'));
+        if (isHighDiffWarn) {
+          const enterBtn = dialog.querySelector('#npc-options button.primary') ||
+            Array.from(dialog.querySelectorAll('#npc-options button')).find(b => {
+              const t = (b.textContent || '').toLowerCase();
+              return t.includes('入場') || t.includes('enter') || t.includes('entrar') || t.includes('✔');
+            });
+          if (enterBtn) {
+            updateStatus('⚠️ [台版] 偵測到高難度提醒彈窗，自動點擊「✔ 入場」...');
+            showToast('⚡ [台版] 自動確認高難度提醒，進入地圖...', 2000);
+            enterBtn.click();
+            return;
+          }
+        }
+      }
+
       // 3.3 判斷是否為關卡/活動出發對話框 (包含 .diff、[data-bank]、.diff-bank 或洛陽升級方式 Subidas、出發關鍵字)
       const isDepartureDialog = Boolean(
         dialog.querySelector('.diff') ||
@@ -3579,7 +3751,8 @@
         dialogFullText.includes('festival') ||
         dialogFullText.includes('ir al campo') ||
         dialogFullText.includes('proponer al grupo') ||
-        dialogFullText.includes('partir')
+        dialogFullText.includes('partir') ||
+        dialogFullText.includes('高難度')
       );
 
       if (!isDepartureDialog) {
@@ -3608,7 +3781,11 @@
 
       // 2. 自訂難度拖曳同步 (若開啟自訂難度)
       if (config.customDiffEnabled && config.difficulty) {
-        for (const key of ['count', 'damage', 'hp', 'speed', 'events']) {
+        // 國際版: count/damage/hp/speed/events；台版 HANS 額外多 tier (刷關等級)
+        const diffKeys = IS_HANS_SERVER
+          ? ['count', 'damage', 'hp', 'speed', 'events', 'tier']
+          : ['count', 'damage', 'hp', 'speed', 'events'];
+        for (const key of diffKeys) {
           const inputEl = document.querySelector(`#npc-text .diff input[data-key="${key}"]`);
           if (inputEl && config.difficulty[key] !== undefined) {
             const targetVal = String(config.difficulty[key]);
@@ -5672,6 +5849,85 @@
   }
 
   // ==========================================
+  // 9.0 斐揚洞窟「月夜貓之鐘」最高權即死避難守護 (Moonlight Bell Evacuation Guard)
+  // 機制解析：月夜貓 (Moonlight Flower) 在特定階段會生成巨鐘 (lift: 560, safeRadius: 150)。
+  // 鳴鐘倒數結束時，若玩家未處於鐘下安全半徑 (<146px) 將直接受到 99900 即死傷害！
+  // 本守護器不論玩家是否開啟自動走位，皆作為戰鬥最高權重即時接管移動，精準走至鐘下避難！
+  // ==========================================
+  let isUnderBellEvacuation = false;
+
+  function findMoonlightBell(game) {
+    if (!game || !Array.isArray(game.fx)) return null;
+    for (const fx of game.fx) {
+      // 月夜貓放鐘時，lift 唯一為 560，且具備 anchor { x, y }
+      if (fx && fx.lift === 560 && fx.anchor && typeof fx.anchor.x === 'number' && typeof fx.anchor.y === 'number') {
+        return {
+          x: fx.anchor.x,
+          y: fx.anchor.y,
+          safeRadius: 140, // 遊戲安全半徑 zc = 150，小於 146 為安全，取 140
+          rawFx: fx
+        };
+      }
+    }
+    return null;
+  }
+
+  function handleMoonlightBellGuard(mapLabel) {
+    const game = getActiveBattleGame();
+    if (!game || game.state !== 'playing' || !game.player || game.player.dead) {
+      isUnderBellEvacuation = false;
+      return false;
+    }
+
+    const bell = findMoonlightBell(game);
+    if (!bell) {
+      if (isUnderBellEvacuation) {
+        // 鐘已消失／鳴鐘結束：解除最高權避難狀態
+        isUnderBellEvacuation = false;
+        console.log('[RO Controller] 🔔 月夜貓之鐘已消失，解除最高權避難狀態');
+        showToast('🔔 月夜貓之鐘已解除，恢復常規戰鬥', 2000);
+        // 若使用者本來未開自動走位，立即停下腳步
+        if (!config.autoMovement) {
+          if (game.movePath) game.movePath = null;
+          if (game.touchMove) game.touchMove = { x: 0, y: 0 };
+        }
+      }
+      return false;
+    }
+
+    // 鐘存在！強制進入最高權避難狀態
+    if (!isUnderBellEvacuation) {
+      isUnderBellEvacuation = true;
+      console.log(`[RO Controller] 🚨 偵測到月夜貓之鐘 (x: ${Math.round(bell.x)}, y: ${Math.round(bell.y)})！啟動最高權走位避難！`);
+      showToast('🔔 偵測到月夜貓之鐘！角色緊急前往鐘下避難！', 2500);
+    }
+
+    const player = game.player;
+    const distToBell = Math.hypot(player.x - bell.x, player.y - bell.y);
+
+    // 安全容許半徑：中心 75px 以內（遊戲判定安全半徑為 146px，75px 位於正核心）
+    const SAFE_CORE_RADIUS = 75;
+
+    if (distToBell > SAFE_CORE_RADIUS) {
+      // 尚未抵達核心安全區：全力往鐘中心移動
+      if (game.touchMove) game.touchMove = { x: 0, y: 0 };
+      if (typeof game.moveTo === 'function') {
+        game.moveTo(bell.x, bell.y);
+      } else {
+        game.movePath = [{ x: bell.x, y: bell.y }];
+      }
+      updateStatus(`${mapLabel} 🔔【月夜貓機制】緊急前往鐘下避難！(距中心 ${Math.round(distToBell)}px)`);
+    } else {
+      // 已在鐘下安全區：定點靜止蓄力防守
+      if (game.movePath) game.movePath = null;
+      if (game.touchMove) game.touchMove = { x: 0, y: 0 };
+      updateStatus(`${mapLabel} 🛡️【月夜貓機制】已處於鐘下安全區 (距中心 ${Math.round(distToBell)}px)，蓄力防守中！`);
+    }
+
+    return true; // 成功接管移動，阻止常規走位執行
+  }
+
+  // ==========================================
   // 9. 戰鬥自動走位與智慧拾荒系統 (Battle Auto-Movement & Smart Looting)
   // 基於 BATTLE_MOVEMENT_DESIGN.md 規格設計：
   // 1. 智慧拾取優先序：全圖磁鐵 (🧲) > 緊急吃肉求生 (🥩) > 金寶箱 (🎁) > 卡片/裝備/寵物蛋 (🃏/🗡️/🥚) > 常態肉塊 > 密集經驗水晶 (💎)
@@ -5754,6 +6010,11 @@
 
     // 🛡️ 戰鬥反作弊常態守護：確保 trapAt 永遠鎖定為 -1，並消滅任何殘留的陷阱怪獸
     maintainBattleSecurityGuard();
+
+    // 🔔 月夜貓「鐘」機制最高權守護：若鐘存在，優先接管移動前往避難
+    if (handleMoonlightBellGuard(mapLabel)) {
+      return true;
+    }
 
     // 若當前處於選卡彈窗或暫停中，立即停下腳步
     const pickerEl = document.getElementById('picker');
@@ -6187,6 +6448,17 @@
         handleInRunDropReveal();
         // 🛡️ 戰鬥狀態全局守護：不管是否開啟自動走位，進入戰鬥狀態均常態維護陷阱與即死狀態
         maintainBattleSecurityGuard();
+
+        // ⚡ 台版 HANS 專屬：單人遠征進場自動開啟 2 倍速
+        if (IS_HANS_SERVER && config.auto2xSpeed) {
+          const spdBtn = document.getElementById('spd-btn');
+          if (spdBtn && spdBtn.offsetParent !== null && !spdBtn.classList.contains('on')) {
+            spdBtn.click();
+            console.log('[RO Controller] ⚡ [台版] 自動開啟 2 倍速');
+            showToast('⚡ [台版] 已自動開啟 2 倍速 (2x)', 1500);
+          }
+        }
+
         if (!isPickingCard) {
           // 若為累積升級模式且開啟自動批次開啟，檢查是否有累積的升級待開
           if (config.levelUpMode === 'accumulate' && config.autoOpenBank) {
@@ -6200,10 +6472,17 @@
             }
           }
           const mapLabel = config.autoFestival || config.targetStage === 'louyang' ? '🏮 洛陽燈籠節' : '⚔️ 地圖';
-          if (config.autoMovement) {
-            updateBattleMovement(mapLabel);
-          } else {
-            updateStatus(`${mapLabel}戰鬥中 (原地輸出，不移動)`);
+
+          // 🔔 月夜貓「鐘」機制最高權守護：
+          // 不論是否開啟自動走位，一旦王放鐘，角色立即自動移動至鐘下避難（最高優先權）！
+          const bellHandled = handleMoonlightBellGuard(mapLabel);
+
+          if (!bellHandled) {
+            if (config.autoMovement) {
+              updateBattleMovement(mapLabel);
+            } else {
+              updateStatus(`${mapLabel}戰鬥中 (原地輸出，不移動)`);
+            }
           }
         }
         break;
@@ -7319,14 +7598,18 @@
     if (!modal) return;
 
     if (!config.difficulty) {
-      config.difficulty = { count: 1.0, damage: 1.0, hp: 1.0, speed: 1.0, events: 1.0 };
+      config.difficulty = { count: 1.0, damage: 1.0, hp: 1.0, speed: 1.0, events: 1.0, tier: 1 };
     }
+    // 確保 tier 存在（舊版設定補全）
+    if (config.difficulty.tier === undefined) config.difficulty.tier = 1;
 
     const isEn = config.lang === 'en';
     const diff = config.difficulty;
     const isInstant = config.levelUpMode === 'instant';
     const isAccumulate = config.levelUpMode === 'accumulate';
     const isCustom = !!config.customDiffEnabled;
+    // 台版 HANS 的刷關等級 (tier) slider
+    const tierVal = Math.round(diff.tier) || 1;
 
     modal.innerHTML = `
       <style>
@@ -7542,6 +7825,12 @@
               <input type="checkbox" id="ro-diff-auto-bank" ${config.autoOpenBank ? 'checked' : ''} style="cursor: pointer; accent-color: #38bdf8;">
               <label for="ro-diff-auto-bank" style="cursor: pointer;">${isEn ? 'Auto open card selection when upgrades are banked during combat (Press B)' : '戰鬥中偵測到累積升級時自動開啟選卡 (按 B)'}</label>
             </div>
+            ${IS_HANS_SERVER ? `
+            <div style="margin-top: 6px; display: flex; align-items: center; gap: 8px; font-size: 12px; color: #94a3b8;">
+              <input type="checkbox" id="ro-diff-auto-2x" ${config.auto2xSpeed ? 'checked' : ''} style="cursor: pointer; accent-color: #38bdf8;">
+              <label for="ro-diff-auto-2x" style="cursor: pointer; color: #38bdf8; font-weight: 600;">⚡ ${isEn ? 'Auto enable 2x speed in solo runs (HANS)' : '單人遠征進場自動開啟 2 倍速 (台版 HANS 專屬)'}</label>
+            </div>
+            ` : ''}
           </div>
 
           <hr style="border: none; border-top: 1px solid rgba(255, 255, 255, 0.08); margin: 0;">
@@ -7557,41 +7846,50 @@
             </div>
 
             <div id="ro-diff-sliders-container" style="opacity: ${isCustom ? '1' : '0.5'}; pointer-events: ${isCustom ? 'auto' : 'none'}; transition: opacity 0.2s;">
+              <!-- 難度滑桿：依伺服器自動適配上限 (台版 HANS 全部可達 2000%，國際版 count=350%, damage=175%, hp=250%, speed=175%, events=250%) -->
               <div class="ro-diff-slider-row">
                 <span class="ro-diff-slider-label">👾 ${isEn ? 'Enemy Count' : '敵人數量 (Count)'}</span>
-                <input type="range" class="ro-diff-slider-input" data-key="count" min="1.0" max="3.5" step="0.05" value="${diff.count}">
+                <input type="range" class="ro-diff-slider-input" data-key="count" min="1.0" max="${IS_HANS_SERVER ? '20.0' : '3.5'}" step="0.05" value="${diff.count}">
                 <span class="ro-diff-slider-val" id="val-count">${Math.round(diff.count * 100)}%</span>
               </div>
 
               <div class="ro-diff-slider-row">
                 <span class="ro-diff-slider-label">💥 ${isEn ? 'Enemy Damage' : '敵人傷害 (Damage)'}</span>
-                <input type="range" class="ro-diff-slider-input" data-key="damage" min="1.0" max="1.75" step="0.05" value="${diff.damage}">
+                <input type="range" class="ro-diff-slider-input" data-key="damage" min="1.0" max="${IS_HANS_SERVER ? '20.0' : '1.75'}" step="0.05" value="${diff.damage}">
                 <span class="ro-diff-slider-val" id="val-damage">${Math.round(diff.damage * 100)}%</span>
               </div>
 
               <div class="ro-diff-slider-row">
                 <span class="ro-diff-slider-label">🩸 ${isEn ? 'Enemy HP' : '敵人生命 (HP)'}</span>
-                <input type="range" class="ro-diff-slider-input" data-key="hp" min="1.0" max="2.5" step="0.05" value="${diff.hp}">
+                <input type="range" class="ro-diff-slider-input" data-key="hp" min="1.0" max="${IS_HANS_SERVER ? '20.0' : '2.5'}" step="0.05" value="${diff.hp}">
                 <span class="ro-diff-slider-val" id="val-hp">${Math.round(diff.hp * 100)}%</span>
               </div>
 
               <div class="ro-diff-slider-row">
                 <span class="ro-diff-slider-label">⚡ ${isEn ? 'Enemy Speed' : '敵人速度 (Speed)'}</span>
-                <input type="range" class="ro-diff-slider-input" data-key="speed" min="1.0" max="1.75" step="0.05" value="${diff.speed}">
+                <input type="range" class="ro-diff-slider-input" data-key="speed" min="1.0" max="${IS_HANS_SERVER ? '20.0' : '1.75'}" step="0.05" value="${diff.speed}">
                 <span class="ro-diff-slider-val" id="val-speed">${Math.round(diff.speed * 100)}%</span>
               </div>
 
               <div class="ro-diff-slider-row">
                 <span class="ro-diff-slider-label">🎪 ${isEn ? 'Event Count' : '事件數量 (Events)'}</span>
-                <input type="range" class="ro-diff-slider-input" data-key="events" min="1.0" max="2.5" step="0.05" value="${diff.events}">
+                <input type="range" class="ro-diff-slider-input" data-key="events" min="1.0" max="${IS_HANS_SERVER ? '20.0' : '2.5'}" step="0.05" value="${diff.events}">
                 <span class="ro-diff-slider-val" id="val-events">${Math.round(diff.events * 100)}%</span>
               </div>
 
-              <!-- 快捷難度預設按鈕 -->
+              ${IS_HANS_SERVER ? `
+              <div class="ro-diff-slider-row" style="margin-top:4px; border-top:1px solid rgba(255,255,255,0.08); padding-top:10px;">
+                <span class="ro-diff-slider-label" style="color:#fbbf24;">🎯 ${isEn ? 'Stage Level (Grind Lv)' : '刷關等級 (台版 HANS)'}</span>
+                <input type="range" class="ro-diff-slider-input ro-diff-tier-input" data-key="tier" min="1" max="20" step="1" value="${tierVal}" style="accent-color:#fbbf24;">
+                <span class="ro-diff-slider-val" id="val-tier" style="color:#fbbf24;">Lv ${tierVal}</span>
+              </div>
+              ` : ''}
+
+              <!-- 快捷難度預設按鈕 (適配台版與國際版不同全滿與農怪倍率) -->
               <div class="ro-diff-presets">
                 <button type="button" class="ro-diff-preset-btn" data-preset="standard">🛡️ ${isEn ? 'Standard (100% all)' : '預設標準 (全100%)'}</button>
-                <button type="button" class="ro-diff-preset-btn" data-preset="farm">🌾 ${isEn ? 'Farming (Count 250% Events 200%)' : '農怪專用 (量250%事200%)'}</button>
-                <button type="button" class="ro-diff-preset-btn" data-preset="max">🔥 ${isEn ? 'Extreme (Max all)' : '極限挑戰 (全滿)'}</button>
+                <button type="button" class="ro-diff-preset-btn" data-preset="farm">🌾 ${IS_HANS_SERVER ? (isEn ? 'Farming (Count 500% Events 500%)' : '農怪專用 (量500%事500%)') : (isEn ? 'Farming (Count 250% Events 200%)' : '農怪專用 (量250%事200%)')}</button>
+                <button type="button" class="ro-diff-preset-btn" data-preset="max">🔥 ${IS_HANS_SERVER ? (isEn ? 'Extreme (Max 2000%)' : '極限挑戰 (全滿2000%)') : (isEn ? 'Extreme (Max all)' : '極限挑戰 (全滿)')}</button>
               </div>
             </div>
           </div>
@@ -7628,6 +7926,13 @@
       };
     }
 
+    const auto2xCb = document.getElementById('ro-diff-auto-2x');
+    if (auto2xCb) {
+      auto2xCb.onchange = () => {
+        config.auto2xSpeed = auto2xCb.checked;
+      };
+    }
+
     if (customCb) {
       customCb.onchange = () => {
         config.customDiffEnabled = customCb.checked;
@@ -7642,8 +7947,14 @@
       const valEl = document.getElementById(`val-${key}`);
       slider.oninput = () => {
         const numVal = parseFloat(slider.value);
-        config.difficulty[key] = numVal;
-        if (valEl) valEl.textContent = `${Math.round(numVal * 100)}%`;
+        // tier 為台版 HANS 刷關等級，以整數 Lv N 顯示；其餘以百分比顯示
+        if (key === 'tier') {
+          config.difficulty[key] = Math.round(numVal);
+          if (valEl) valEl.textContent = `Lv ${Math.round(numVal)}`;
+        } else {
+          config.difficulty[key] = numVal;
+          if (valEl) valEl.textContent = `${Math.round(numVal * 100)}%`;
+        }
       };
     });
 
@@ -7651,18 +7962,33 @@
     modal.querySelectorAll('.ro-diff-preset-btn').forEach(btn => {
       btn.onclick = () => {
         const preset = btn.dataset.preset;
+        const currentTier = config.difficulty.tier || 1; // 保留刷關等級不受預設重置影響
         if (preset === 'standard') {
-          config.difficulty = { count: 1.0, damage: 1.0, hp: 1.0, speed: 1.0, events: 1.0 };
+          config.difficulty = { count: 1.0, damage: 1.0, hp: 1.0, speed: 1.0, events: 1.0, tier: currentTier };
         } else if (preset === 'farm') {
-          config.difficulty = { count: 2.5, damage: 1.0, hp: 1.0, speed: 1.0, events: 2.0 };
+          if (IS_HANS_SERVER) {
+            config.difficulty = { count: 5.0, damage: 1.0, hp: 1.0, speed: 1.0, events: 5.0, tier: currentTier };
+          } else {
+            config.difficulty = { count: 2.5, damage: 1.0, hp: 1.0, speed: 1.0, events: 2.0, tier: currentTier };
+          }
         } else if (preset === 'max') {
-          config.difficulty = { count: 3.5, damage: 1.75, hp: 2.5, speed: 1.75, events: 2.5 };
+          if (IS_HANS_SERVER) {
+            // 台版 HANS 全部可拉滿至 2000% (20.0)
+            config.difficulty = { count: 20.0, damage: 20.0, hp: 20.0, speed: 20.0, events: 20.0, tier: currentTier };
+          } else {
+            // 國際版上限: count 3.5, damage 1.75, hp 2.5, speed 1.75, events 2.5
+            config.difficulty = { count: 3.5, damage: 1.75, hp: 2.5, speed: 1.75, events: 2.5, tier: currentTier };
+          }
         }
         modal.querySelectorAll('.ro-diff-slider-input').forEach(slider => {
           const key = slider.dataset.key;
           slider.value = config.difficulty[key];
           const valEl = document.getElementById(`val-${key}`);
-          if (valEl) valEl.textContent = `${Math.round(config.difficulty[key] * 100)}%`;
+          if (key === 'tier') {
+            if (valEl) valEl.textContent = `Lv ${Math.round(config.difficulty[key])}`;
+          } else {
+            if (valEl) valEl.textContent = `${Math.round(config.difficulty[key] * 100)}%`;
+          }
         });
       };
     });
