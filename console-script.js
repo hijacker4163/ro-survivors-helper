@@ -1,10 +1,10 @@
-// RO Survivors 控制中心即貼即用腳本 v2.0.7
+// RO Survivors 控制中心即貼即用腳本 v2.0.8
 // 使用方式：進入遊戲大廳或戰鬥中，按 F12 打開 Console，整段貼上並按 Enter 即可啟動！
 // -------------------------------------------------------------
 (function () {
   'use strict';
 
-  const SCRIPT_VERSION = '2.0.7';
+  const SCRIPT_VERSION = '2.0.8';
 
   let activeBattleGameInstance = null;
   let lastBattleWon = null;
@@ -5718,19 +5718,14 @@
     currentMovementTarget = null;
   }
 
-  function updateBattleMovement(mapLabel) {
-    const game = getActiveBattleGame();
-    if (!game) {
-      updateStatus(`${mapLabel}戰鬥中 (原地輸出，未捕獲戰鬥實例)`);
-      return false;
-    }
-
-    if (game.state !== 'playing' || !game.player || game.player.dead) {
-      return false;
-    }
-
-    // 🛡️ 戰鬥反作弊常態守護：確保 trapAt 永遠鎖定為 -1，並消滅任何殘留的陷阱怪獸
+  /**
+   * 🛡️ 戰鬥狀態全局守護 (Combat State & Anti-Cheat Guard)
+   * 解耦自動走位依賴：依據遊戲戰鬥狀態常態執行，杜絕依賴自動走路開關
+   */
+  function maintainBattleSecurityGuard() {
     try {
+      const game = getActiveBattleGame();
+      if (!game || game.state !== 'playing' || !game.player || game.player.dead) return;
       game.trapAt = -1;
       game.trapShotAt = -1;
       if (Array.isArray(game.enemies)) {
@@ -5744,6 +5739,21 @@
         }
       }
     } catch (e) {}
+  }
+
+  function updateBattleMovement(mapLabel) {
+    const game = getActiveBattleGame();
+    if (!game) {
+      updateStatus(`${mapLabel}戰鬥中 (原地輸出，未捕獲戰鬥實例)`);
+      return false;
+    }
+
+    if (game.state !== 'playing' || !game.player || game.player.dead) {
+      return false;
+    }
+
+    // 🛡️ 戰鬥反作弊常態守護：確保 trapAt 永遠鎖定為 -1，並消滅任何殘留的陷阱怪獸
+    maintainBattleSecurityGuard();
 
     // 若當前處於選卡彈窗或暫停中，立即停下腳步
     const pickerEl = document.getElementById('picker');
@@ -6175,6 +6185,8 @@
         break;
       case 'IN_COMBAT':
         handleInRunDropReveal();
+        // 🛡️ 戰鬥狀態全局守護：不管是否開啟自動走位，進入戰鬥狀態均常態維護陷阱與即死狀態
+        maintainBattleSecurityGuard();
         if (!isPickingCard) {
           // 若為累積升級模式且開啟自動批次開啟，檢查是否有累積的升級待開
           if (config.levelUpMode === 'accumulate' && config.autoOpenBank) {

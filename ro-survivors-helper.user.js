@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Survivors 控制中心 (RO Controller)
 // @namespace    https://github.com/hijacker4163/ro-survivors-helper
-// @version      2.0.7
+// @version      2.0.8
 // @description  RO Survivors 控制中心：整合穩定組隊系統 (隊長自動邀請/隊員原地待命自動同意)、相容 HANS 伺服器、全方位反作弊與反偵測金鐘罩、戰績持久化統計、自動拾取走位與多國語言支援
 // @author       Martian Rabbit
 // @homepage     https://github.com/hijacker4163/ro-survivors-helper
@@ -17,7 +17,7 @@
 (function () {
   'use strict';
 
-  const SCRIPT_VERSION = '2.0.7';
+  const SCRIPT_VERSION = '2.0.8';
 
   let activeBattleGameInstance = null;
   let lastBattleWon = null;
@@ -5731,19 +5731,14 @@
     currentMovementTarget = null;
   }
 
-  function updateBattleMovement(mapLabel) {
-    const game = getActiveBattleGame();
-    if (!game) {
-      updateStatus(`${mapLabel}戰鬥中 (原地輸出，未捕獲戰鬥實例)`);
-      return false;
-    }
-
-    if (game.state !== 'playing' || !game.player || game.player.dead) {
-      return false;
-    }
-
-    // 🛡️ 戰鬥反作弊常態守護：確保 trapAt 永遠鎖定為 -1，並消滅任何殘留的陷阱怪獸
+  /**
+   * 🛡️ 戰鬥狀態全局守護 (Combat State & Anti-Cheat Guard)
+   * 解耦自動走位依賴：依據遊戲戰鬥狀態常態執行，杜絕依賴自動走路開關
+   */
+  function maintainBattleSecurityGuard() {
     try {
+      const game = getActiveBattleGame();
+      if (!game || game.state !== 'playing' || !game.player || game.player.dead) return;
       game.trapAt = -1;
       game.trapShotAt = -1;
       if (Array.isArray(game.enemies)) {
@@ -5757,6 +5752,21 @@
         }
       }
     } catch (e) {}
+  }
+
+  function updateBattleMovement(mapLabel) {
+    const game = getActiveBattleGame();
+    if (!game) {
+      updateStatus(`${mapLabel}戰鬥中 (原地輸出，未捕獲戰鬥實例)`);
+      return false;
+    }
+
+    if (game.state !== 'playing' || !game.player || game.player.dead) {
+      return false;
+    }
+
+    // 🛡️ 戰鬥反作弊常態守護：確保 trapAt 永遠鎖定為 -1，並消滅任何殘留的陷阱怪獸
+    maintainBattleSecurityGuard();
 
     // 若當前處於選卡彈窗或暫停中，立即停下腳步
     const pickerEl = document.getElementById('picker');
@@ -6188,6 +6198,8 @@
         break;
       case 'IN_COMBAT':
         handleInRunDropReveal();
+        // 🛡️ 戰鬥狀態全局守護：不管是否開啟自動走位，進入戰鬥狀態均常態維護陷阱與即死狀態
+        maintainBattleSecurityGuard();
         if (!isPickingCard) {
           // 若為累積升級模式且開啟自動批次開啟，檢查是否有累積的升級待開
           if (config.levelUpMode === 'accumulate' && config.autoOpenBank) {

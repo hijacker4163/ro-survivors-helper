@@ -2,17 +2,38 @@
 
 > [!WARNING]
 > ### ⚠️ 重要風險聲明 / Important Risk Warning
-> **使用本輔助程式可能存在被遊戲官方偵測或帳號封鎖（Ban）之風險。**  
-> 本工具僅供前端網頁技術研究、無障礙操作輔助 (Accessibility) 與學習交流使用。請使用者自行評估並承擔使用本腳本所衍生之任何帳號處分、角色封鎖或數據變動風險，開發者概不對任何帳號損失承擔責任。  
-> 
-> **Using this helper script carries the inherent risk of account detection, restriction, or permanent ban.**  
-> This project is intended strictly for educational, accessibility, and frontend automation research purposes. Users assume full responsibility and risk for their own game accounts when using this software.
+>
+> **使用本輔助程式可能存在被遊戲官方偵測或帳號封鎖（Ban）之風險。**
+>
+> **國際服最新封鎖機制公告：**
+> 目前國際服已針對曾使用過外掛的玩家新增連線封鎖機制，受影響的玩家可能會遭遇無法創建角色或無法登入遊戲的情況。
+>
+> 目前已知的處理方式為使用未受封鎖的乾淨網路環境重新進行角色創建，完成後才可正常登入遊戲。請特別留意，此情況可能與帳號本身的封鎖狀態有關，並非單純更換登入方式即可解決。
+>
+> **特此公告，請使用者自行評估相關風險。**
+>
+> 本工具僅供前端網頁技術研究、無障礙操作輔助（Accessibility）與學習交流使用。使用者須自行評估並承擔使用本腳本所衍生之任何帳號處分、角色封鎖或數據變動風險，開發者概不對任何帳號損失承擔責任。
+>
+> ---
+>
+> ### ⚠️ Important Risk Warning
+>
+> **Using this helper script carries the inherent risk of detection, account restrictions, or permanent bans by the game operator.**
+>
+> **Latest Global Server Restriction Notice:**
+> The Global Server has introduced a new connection restriction targeting players who have previously used third-party cheats or unauthorized tools. Affected players may be unable to create characters or log into the game.
+>
+> Currently, the known workaround is to use a clean, unrestricted network environment to create a character before attempting to log in. Please note that this issue may be related to the account's restriction status and may not be resolved simply by changing the login method.
+>
+> **This notice is provided for users' awareness. Please assess the associated risks before proceeding.**
+>
+> This project is intended strictly for educational purposes, accessibility assistance, and frontend automation research. Users assume full responsibility for any account penalties, character restrictions, or data changes resulting from the use of this script. The developer accepts no liability for any account-related losses.
 
 <div align="center">
 
 <img src="logo.webp" alt="Martian Rabbit Logo" width="160" style="border-radius: 20px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); margin-bottom: 14px;" />
 
-[![Version](https://img.shields.io/badge/Version-2.0.7-blue.svg?style=for-the-badge)](https://github.com/hijacker4163/ro-survivors-helper)
+[![Version](https://img.shields.io/badge/Version-2.0.8-blue.svg?style=for-the-badge)](https://github.com/hijacker4163/ro-survivors-helper)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-Buy%20Me%20a%20Coffee-ff5f5f.svg?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/martianrabbit)
 
