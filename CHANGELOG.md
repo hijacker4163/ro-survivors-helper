@@ -5,7 +5,7 @@
 <div align="center">
 
 [![Buy Me a Coffee](https://img.shields.io/badge/Ko--fi-請兔子喝杯咖啡-ff5e5b?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/martianrabbit)
-[![Version](https://img.shields.io/badge/Version-2.0.9-blue.svg?style=for-the-badge)](https://github.com/hijacker4163/ro-survivors-helper)
+[![Version](https://img.shields.io/badge/Version-2.0.10-blue.svg?style=for-the-badge)](https://github.com/hijacker4163/ro-survivors-helper)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 
 **🐰 位於南半球從火星下來的兔子程式員 (Martian Rabbit) 精心打造 🚀**  
@@ -13,6 +13,40 @@
 👉 **[點此贊助請喝咖啡 (Ko-fi)](https://ko-fi.com/martianrabbit)**
 
 </div>
+
+---
+
+## 🚀 v2.0.10 (2026-11-24) - 國際版最新「神器與技能神祇」三重獨立配置 & 結算架構整併與開箱排程
+
+### 🌟 核心更新與新功能
+
+#### 1. 🛡️ 戰鬥安全被動金鐘罩提升為常態無條件守護 & 自動登入權限收斂
+- **即死 Boss 懲罰解除常態化 (`maintainBattleSecurityGuard`)**：
+  - 將即死 Boss 與陷阱防護直接提升至 `mainLoop` 最頂部，**不再依賴玩家是否點擊「啟動運作」**。
+  - 只要腳本載入，無論玩家是純手動遊玩還是自動輔助，一旦在戰鬥中偵測到惡意召喚的即死陷阱怪物 (`trap: true`)，一律常態秒殺清場並鎖定 `trapAt = -1`。
+- **自動登入受總開關完全管轄**：
+  - 修正了過去只要勾選自動登入、即使未啟用總開關也會自動登入的邏輯；現在嚴格要求「總開關已啟用 (`config.enabled`) 且開啟自動登入」才會自動點擊進入遊戲。
+
+#### 2. 👑 國際版最新機制適配：三重视窗獨立配置架構
+- **環境智慧分流 (`IS_HANS_SERVER`)**：
+  - **台版 HANS 伺服器**：完整維持原本的 2 個視窗（技能視窗 + 關卡道具/神祇視窗），不產生多餘無用按鈕，維持原有操作體驗。
+  - **官方國際版**：正式升級為 **3 個獨立配置視窗**：
+    1. 🎯 **各職業專屬技能配置視窗 (Skills Modal)**：升級時挑選的核心技能與被動詞綴偏好。
+    2. 👑 **核心技能神祇加冕視窗 (Skill Deity Modal - 全新！)**：專為國際版 Lv 20 挑選專屬「技能神祇 (Skill Deity)」設計，自由配置優先順位（首選狂擊、二連矢等神祇，未持有則自動遞補），修復了預設順位造成的遞移偏移問題。
+    3. 🎒 **關卡道具與神器配置視窗 (Items & Artifacts Modal)**：依據國際版官方公告，將 13 種寶箱數值神祇正式更名為「神器 (Artifacts)」，與藥水、秘藥、祝福、料理分開展示與設定。
+
+#### 3. 🎯 結算勝負判定重構與整合 (`evaluateGameOverResult`)
+- **單一數據來源判定**：將原本分散於 `handleGameOver` 與 `getGameOverResult` 的雙重標題比對整合成統一函式 `evaluateGameOverResult()`，移除冗餘無效函式。
+- **適配台版中文結算標題**：精準匹配 `你活下來了！`（勝利通關）與 `你死了`（失敗）。
+- **徹底杜絕提前重開搶跑 (Race Condition)**：若結算 DOM 尚未渲染完成，統一進入 pending 等待，只有在勝負結算數據完整寫入後才啟動重啟計時，根除因過快跳轉大廳導致記為中斷 (Aborted) 的異常現象。
+
+#### 4. 📦 累積升級模式 (Accumulate Mode) 批次排程開啟策略與參數重置
+- 提供 3 種簡潔穩定的排程模式：`⚡ 即時開啟 (累積即開)`、`⏱️ 每 30 秒` 以及 `⏱️ 每 60 秒`，移除容易導致掛機停滯的線性模式。
+- **4 點累積保底放行機制**：若累積滿 4 點以上，無論冷卻時間是否到達皆立即放行開啟，防止戰鬥卡箱。
+- **局間生命週期參數重置**：結算完成 (`handleGameOver`)、返回大廳 (`LOBBY`) 與開局時徹底重置 `lastBankOpenedAt = 0`，首批累積點數直接放行開啟，不再殘留上一場的時間戳記。
+
+#### 5. 🥷 隱藏選卡介面 (背景自動選擇)
+- 新增 `#picker.ro-stealth-hide` 視覺透明樣式與控制開關，在背景自動挑選技能與道具，不遮擋戰鬥視野。
 
 ---
 

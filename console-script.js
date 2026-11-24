@@ -1,10 +1,23 @@
-// RO Survivors 控制中心即貼即用腳本 v2.0.8
-// 使用方式：進入遊戲大廳或戰鬥中，按 F12 打開 Console，整段貼上並按 Enter 即可啟動！
-// -------------------------------------------------------------
+// ==UserScript==
+// @name         RO Survivors 控制中心 (RO Controller)
+// @namespace    https://github.com/hijacker4163/ro-survivors-helper
+// @version      2.0.10
+// @description  RO Survivors 控制中心：整合穩定組隊系統 (隊長自動邀請/隊員原地待命自動同意)、相容 HANS 伺服器、全方位反作弊與反偵測金鐘罩、戰績持久化統計、自動拾取走位與多國語言支援
+// @author       Martian Rabbit
+// @homepage     https://github.com/hijacker4163/ro-survivors-helper
+// @supportURL   https://ko-fi.com/martianrabbit
+// @match        https://ro-survivors.com/*
+// @match        https://ro.hans-webgametw.com/*
+// @match        http://localhost:*/*
+// @match        http://127.0.0.1:*/*
+// @grant        none
+// @run-at       document-start
+// ==/UserScript==
+
 (function () {
   'use strict';
 
-  const SCRIPT_VERSION = '2.0.9';
+  const SCRIPT_VERSION = '2.0.10';
 
   let activeBattleGameInstance = null;
   let lastBattleWon = null;
@@ -1160,6 +1173,10 @@
       levelup_instant: '⚡ 立即升級 (每級暫停)',
       levelup_accumulate: '📦 累積升級 (整批選卡)',
       auto_open_bank: '自動開啟累積批次選卡 (按 B)',
+      bank_trigger_mode: '批次開啟排程策略',
+      bank_mode_immediate: '即時開啟 (累積即開)',
+      bank_mode_interval_30: '每 30 秒批次開啟',
+      bank_mode_interval_60: '每 60 秒批次開啟',
       open_diff_modal: '⚙️ 升級方式與難度配置彈窗...',
       auto_festival: '🏮 優先循環燈籠節活動 (洛陽)',
       auto_lobby: '🌐 自動隨機選大廳 (避開滿員)',
@@ -1187,6 +1204,8 @@
       btn_reset_solo: '🔄 一鍵重設單人模式 (清空組隊狀態)',
       tip_reset_solo: '若組隊結束後想立即以單人模式進行遊戲，點此可強制退出隊伍、重設單人狀態並開啟自動進入地圖，徹底防止卡死',
       auto_pick_card: '🃏 自動升級選卡',
+      stealth_pick_card: '🥷 隱藏選卡介面 (背景自動選擇)',
+      stealth_pick_tip: '開啟後，當副本內升級或開啟寶箱時，選卡介面將以透明隱藏方式在背景自動為您選好技能與道具，不遮擋戰鬥視野',
       auto_reroll: '🎲 智慧重刷 (先單張後全部)',
       auto_reroll_tip: '在選技能時，若畫面上沒有專注技能，優先使用單張重刷；若單張重刷用完還是沒有想要的卡片，則使用『重刷全部』',
       pick_delay: '⏱️ 擬人選卡延遲 (ms)',
@@ -1269,6 +1288,10 @@
       levelup_instant: '⚡ Instant (Pause per level)',
       levelup_accumulate: '📦 Accumulate (Batch open)',
       auto_open_bank: 'Auto open banked upgrades (Key B)',
+      bank_trigger_mode: 'Banked Open Schedule',
+      bank_mode_immediate: 'Immediate (Open on bank)',
+      bank_mode_interval_30: 'Every 30 Seconds',
+      bank_mode_interval_60: 'Every 60 Seconds (1 min)',
       open_diff_modal: '⚙️ Mode & Difficulty Settings...',
       auto_festival: '🏮 Loop Lantern Festival (Louyang)',
       auto_lobby: '🌐 Auto Select Lobby (Avoid full)',
@@ -1296,6 +1319,8 @@
       btn_reset_solo: '🔄 Reset to Solo Mode',
       tip_reset_solo: 'Force leave any party and switch back to solo mode with auto-enter map enabled to prevent any lobby lockup',
       auto_pick_card: '🃏 Auto Pick Cards',
+      stealth_pick_card: '🥷 Stealth Pick Cards (Background Auto)',
+      stealth_pick_tip: 'When enabled, level-up and chest selection modals are visually hidden while the helper automatically picks skills/items in the background without blocking combat view.',
       auto_reroll: '🎲 Smart Reroll (Single then All)',
       auto_reroll_tip: 'When selecting skills, if no focused skills appear, prioritize single-card reroll. If single rerolls run out, use "Reroll All".',
       pick_delay: '⏱️ Human-like Pick Delay (ms)',
@@ -1638,7 +1663,9 @@
     movementMode: 'smart_loot', // 走位模式: 'smart_loot' (智慧拾荒撿寶), 'orbital' (圓周風箏拉打), 'stationary_defense' (定點防守求生)
     kitingRadius: 800,        // 🌀 風箏走位半徑 (像素，推薦 400~800)
     preferredAffixes: ['targets', 'cooldown', 'damage'], // ✨ 技能升級詞綴偏好優先名單 (+目標, 冷卻縮減, 傷害提升 等)
+    skillDeitySettings: {}, // 👑 國際版專屬：各職業核心技能神祇 (Skill Deity) 偏好順位名單
     autoPickCard: true,       // 自動升級選卡
+    stealthCardPicker: false, // 🥷 隱藏選卡介面 (背景自動選擇技能/道具)
     autoResume: false,        // 自動解除暫停 (切分頁/ESC 自動繼續，預設關閉)
     backgroundMode: false,    // 🔄 允許縮小視窗與切換分頁 (背景持續運行 60 FPS，預設關閉)
     autoLogin: false,          // 🔑 自動登入與選角色 (維修/斷線/重新整理自動進入遊戲大廳，預設關閉)
@@ -1656,6 +1683,7 @@
     targetStageIndex: -1,     // 相容舊版
     levelUpMode: 'instant',   // 升級方式: 'instant'(立即升級), 'accumulate'(累積升級)
     autoOpenBank: true,       // 累積模式下是否自動點擊開啟批次選卡 (按 B)
+    bankTriggerMode: 'immediate', // 累積批次開啟排程: 'immediate'(即時), 'interval_30'(每30秒), 'interval_60'(每60秒)
     auto2xSpeed: IS_HANS_SERVER, // ⚡ 台版 HANS 單人進場自動開啟 2 倍速 (預設依伺服器開啟)
     customDiffEnabled: false, // 是否自訂關卡難度 (出發確認時自動同步)
     difficulty: {
@@ -1922,7 +1950,7 @@
         timestamp: Date.now(),
         timeStr: new Date().toLocaleTimeString('zh-TW', { hour12: false }),
         type: type,
-        typeName: type === 'chest' ? '📦 寶箱道具' : (type === 'story' ? '📖 劇情獎勵' : '⭐ 升級技能'),
+        typeName: type === 'deity' ? '👑 技能神祇' : (type === 'chest' ? '📦 寶箱道具' : (type === 'story' ? '📖 劇情獎勵' : '⭐ 升級技能')),
         totalCandidates: cards.length,
         chosenIndex: chosenIndex,
         chosenName: chosenCard.querySelector('.pk-name')?.textContent?.trim() || `#${chosenIndex + 1}`,
@@ -5114,6 +5142,7 @@
         isPickingCard = false;
         pickedActionAttempts.clear();
         cardPickerOpenedAt = 0;
+        syncStealthCardPickerUI(false);
         return;
       }
 
@@ -5143,6 +5172,55 @@
       const fillSlotsFirst = !!config.banishOnlyWhenSlotsFull;
       const isActualSlotsFull = areSkillSlotsFull();
       const slotsFull = fillSlotsFirst ? isActualSlotsFull : (isActualSlotsFull || isFocusBuildFormed(curFocusList));
+
+      const pickerTitle = (document.getElementById('pk-title')?.textContent || '').toLowerCase();
+      const pickerSub = (document.getElementById('pk-sub')?.textContent || '').toLowerCase();
+      const isSkillDeityPicker = pickerTitle.includes('elige tu deity') || 
+                                 pickerTitle.includes('choose your deity') || 
+                                 pickerTitle.includes('選擇你的神祇') || 
+                                 pickerTitle.includes('選擇神祇') || 
+                                 pickerSub.includes('solo una: sube un rango') || 
+                                 pickerSub.includes('sube un rango cada') || 
+                                 cards.some(c => {
+                                   const b = (c.querySelector('.pk-badge')?.textContent || '').toLowerCase();
+                                   const n = (c.querySelector('.pk-name')?.textContent || '').toLowerCase();
+                                   return (b.includes('deity') || b.includes('神祇')) && (n.includes('deity') || n.includes('神祇'));
+                                 });
+
+      // 👑 國際版專屬：技能神祇加冕 (Skill Deity Selection at Lv 20)
+      if (isSkillDeityPicker) {
+        const curJobDeityPref = getSkillDeityPreferences(config.selectedJob);
+        let chosenDeityCard = null;
+        let chosenDeityIdx = 0;
+
+        for (const prefSkill of curJobDeityPref) {
+          const normPref = normalizeTextForMatch(prefSkill);
+          for (let i = 0; i < cards.length; i++) {
+            const card = cards[i];
+            const cardName = normalizeTextForMatch(card.querySelector('.pk-name')?.textContent || '');
+            const cardText = normalizeTextForMatch(card.textContent || '');
+            if (cardName.includes(normPref) || cardText.includes(normPref)) {
+              chosenDeityCard = card;
+              chosenDeityIdx = i;
+              break;
+            }
+          }
+          if (chosenDeityCard) break;
+        }
+
+        // 若偏好神祇皆未匹配，保底選第 1 張神祇
+        if (!chosenDeityCard && cards.length > 0) {
+          chosenDeityCard = cards[0];
+          chosenDeityIdx = 0;
+        }
+
+        if (chosenDeityCard) {
+          recordPickHistory('deity', cards, chosenDeityIdx, chosenDeityCard, ['👑 核心技能神祇加冕']);
+          updateStatus(`👑 國際版：為技能 [${chosenDeityCard.querySelector('.pk-name')?.textContent?.trim()}] 加冕專屬神祇！`);
+          dispatchCardSelection(chosenDeityCard, chosenDeityIdx, cards.length);
+          return;
+        }
+      }
 
       const isItemTypePicker = isItemPickerModal(cards) || cards.some(c => isItemCard(c));
 
@@ -5365,11 +5443,11 @@
       console.log(`[RO Controller] 最終選卡: [${cardName}]${cloneNote} (級別: ${rarityText}, 索引: ${chosenIndex})`);
 
       // 判斷選卡類型 (技能 / 寶箱道具 / 劇情裝備) 並寫入歷史紀錄庫
-      const pickerTitle = document.getElementById('pk-title')?.textContent?.trim() || '';
+      const rawPickerTitle = document.getElementById('pk-title')?.textContent?.trim() || '';
       let pickType = 'skill';
-      if (isItemTypePicker || pickerTitle.includes('Cofre') || pickerTitle.includes('Chest') || pickerTitle.includes('寶箱') || pickerTitle.includes('Objetos')) {
+      if (isItemTypePicker || rawPickerTitle.includes('Cofre') || rawPickerTitle.includes('Chest') || pickerTitle.includes('寶箱') || pickerTitle.includes('Objetos')) {
         pickType = 'chest';
-      } else if (pickerTitle.includes('historia') || pickerTitle.includes('劇情') || pickerTitle.includes('story')) {
+      } else if (rawPickerTitle.includes('historia') || rawPickerTitle.includes('劇情') || pickerTitle.includes('story')) {
         pickType = 'story';
       }
       recordPickHistory(pickType, cards, chosenIndex, targetCard, currentPickActions);
@@ -5427,6 +5505,26 @@
     }
   }
 
+  /**
+   * 同步選卡介面 (#picker) 的隱藏/顯示狀態
+   * 遵循程式碼完整性與擴充原則，獨立抽離函式處理
+   */
+  function syncStealthCardPickerUI(hide) {
+    try {
+      const picker = document.getElementById('picker');
+      if (!picker) return;
+      if (hide && config.stealthCardPicker && config.autoPickCard) {
+        if (!picker.classList.contains('ro-stealth-hide')) {
+          picker.classList.add('ro-stealth-hide');
+        }
+      } else {
+        if (picker.classList.contains('ro-stealth-hide')) {
+          picker.classList.remove('ro-stealth-hide');
+        }
+      }
+    } catch (e) {}
+  }
+
   function handleCardPicker() {
     if (!config.autoPickCard || isPickingCard) return;
     const picker = document.getElementById('picker');
@@ -5438,7 +5536,12 @@
     pickedActionAttempts.clear();
     clearPickerRetry();
     detectPlayerJob();
-    updateStatus('🃏 偵測到選卡畫面！擬人化思考延遲中...');
+    if (config.stealthCardPicker) {
+      syncStealthCardPickerUI(true);
+      updateStatus('🥷 偵測到選卡！介面已隱藏，背景自動選取中...');
+    } else {
+      updateStatus('🃏 偵測到選卡畫面！擬人化思考延遲中...');
+    }
 
     // 擬人化動態反應時間：基礎延遲 + 隨機擾動 (確保反應時間 > 1200ms，徹底避開遊戲 c0 超速判定)
     const baseDelay = Math.max(1300, config.pickDelayMs || 1450);
@@ -5453,6 +5556,35 @@
   // ==========================================
   // 7.1 組隊掉落物自動擲骰分寶 (Auto Loot Roll)
   // ==========================================
+  let lastBankOpenedAt = 0; // 上次開啟累積升級的時間戳記 (用於秒數排程與等級線性自適應)
+
+  /**
+   * 判定累積升級 (Banked Upgrades) 是否已達開啟門檻
+   * 支援: immediate(即時開啟), interval_30(每30秒), interval_60(每60秒)
+   */
+  function shouldTriggerBankOpen(game, bankCount) {
+    if (!config.autoOpenBank) return false;
+    const mode = config.bankTriggerMode || 'immediate';
+    if (mode === 'immediate') return true;
+
+    // 強制保底：若累積點數達到 4 點以上，無論排程時間是否到達，立即開啟防卡死
+    if (bankCount >= 4) return true;
+
+    // 局內首次獲得累積點數時，若尚未開過箱，立即放行開啟
+    if (!lastBankOpenedAt || lastBankOpenedAt === 0) return true;
+
+    const now = performance.now();
+    const elapsed = now - lastBankOpenedAt;
+
+    if (mode === 'interval_30') {
+      return elapsed >= 30000;
+    }
+    if (mode === 'interval_60') {
+      return elapsed >= 60000;
+    }
+
+    return true;
+  }
   let isLootSettling = false;
   let gameOverRestartTimer = null;
   let gameOverEnteredAt = 0;
@@ -5602,40 +5734,43 @@
   }
 
   /**
-   * 判定副本結算結果 (通關 Victory / 失敗 Defeat / 中斷 Aborted)
-   * 依據遊戲引擎原生事件、玩家存活狀態與 #go-title 多國語言智慧綜合判定 (西班牙語 / 英語 / 繁中)
+   * 判定副本結算結果 (通關 Victory / 失敗 Defeat / 中斷 Aborted / 未就緒 Pending)
+   * 整合遊戲引擎原生狀態、回調事件與 #go-title 多國語言判定 (台版中文 / 西語 / 英語)
+   * 若結算畫面數據仍在載入填充中且未達 1200ms 逾時，回傳 'pending' 避免提前搶跑誤判
    */
-  function getGameOverResult() {
-    // 0. 最高優先級：直接從戰鬥引擎實例與原生事件回調檢查 (最精確客觀，不受文字翻譯、DOM延遲或模板假字干擾)
+  function evaluateGameOverResult() {
+    // 0. 戰鬥引擎回調狀態 (最高精確度)
+    if (lastBattleWon === true) return { result: 'victory', title: 'Engine Callback (Won)' };
+    if (lastBattleWon === false) return { result: 'defeat', title: 'Engine Callback (Lost)' };
+
     const game = activeBattleGameInstance || window.__roBattleGame || (typeof D !== 'undefined' ? D : null);
-
-    // 若引擎事件回調已精確捕獲勝負
-    if (lastBattleWon === true) {
-      return 'victory';
-    }
-    if (lastBattleWon === false) {
-      return 'defeat';
-    }
-
-    // 若角色在戰鬥中已陣亡
     if (game && game.player && game.player.dead) {
-      return 'defeat';
+      return { result: 'defeat', title: 'Player Dead' };
     }
 
-    const goTitle = (document.getElementById('go-title')?.textContent || '').trim().toLowerCase();
+    const rawGoTitle = (document.getElementById('go-title')?.textContent || '').trim();
+    const goTitle = rawGoTitle.toLowerCase();
     const goStats = document.getElementById('go-stats');
     const isStatsPopulated = Boolean(goStats && goStats.children && goStats.children.length > 0);
 
-    // 1. 中途放棄 / 退出 / 斷線 (Aborted / Abandoned)
+    // 1. 台版中文專屬精確判定 (優先度最高)
+    if (rawGoTitle.includes('你活下來了') || rawGoTitle.includes('活下來')) {
+      return { result: 'victory', title: rawGoTitle };
+    }
+    if (rawGoTitle.includes('你死了') || rawGoTitle === '你死了') {
+      return { result: 'defeat', title: rawGoTitle };
+    }
+
+    // 2. 中途放棄 / 退出 / 斷線 (Aborted / Abandoned)
     const isAbandoned = goTitle.includes('abandon') || 
                         goTitle.includes('cancel') || 
                         goTitle.includes('terminada') || 
                         goTitle.includes('放棄') || 
                         goTitle.includes('中斷') || 
                         goTitle.includes('退出');
-    if (isAbandoned) return 'aborted';
+    if (isAbandoned) return { result: 'aborted', title: rawGoTitle };
 
-    // 2. 明確通關 / 存活 (Victory / Cleared) - 優先於模糊失敗判定，防止勝負混淆
+    // 3. 多國語言通關 / 存活 (Victory / Cleared)
     const isVictory = goTitle.includes('sobreviv') || 
                       goTitle.includes('surviv') || 
                       goTitle.includes('superad') || 
@@ -5651,13 +5786,12 @@
                       goTitle.includes('攻頂') || 
                       goTitle.includes('勝利') || 
                       goTitle.includes('成功') || 
-                      goTitle.includes('活下來') ||
-                      goTitle.includes('完結') ||
-                      goTitle.includes('過關') ||
+                      goTitle.includes('完結') || 
+                      goTitle.includes('過關') || 
                       goTitle.includes('大獲全勝');
-    if (isVictory) return 'victory';
+    if (isVictory) return { result: 'victory', title: rawGoTitle };
 
-    // 3. 明確死亡 / 失敗 (Defeat / Death) - 嚴格字詞比對，避免單一字元「敗」、「死」造成誤殺 (例如「擊敗首領」誤判為失敗)
+    // 4. 多國語言明確死亡 / 失敗 (Defeat / Death)
     const isDefeatKeyword = goTitle.includes('muerto') || 
                             goTitle.includes('morreu') || 
                             goTitle.includes('died') || 
@@ -5672,23 +5806,33 @@
                             goTitle.includes('死亡') || 
                             goTitle.includes('失敗') || 
                             goTitle.includes('殞命') || 
-                            goTitle.includes('倒下') || 
-                            (goTitle.includes('你死了') && !goTitle.includes('活下來'));
-    if (isDefeatKeyword) return 'defeat';
+                            goTitle.includes('倒下');
+    if (isDefeatKeyword) return { result: 'defeat', title: rawGoTitle };
 
-    // 4. 若遊戲引擎存在且玩家角色並未死亡 (game.player.dead === false)，且結算數據已渲染完畢，判定為通關
+    // 5. 數據填充完成且引擎角色未死
     if (game && game.player && !game.player.dead && isStatsPopulated) {
-      return 'victory';
+      return { result: 'victory', title: rawGoTitle || 'Stats Populated & Alive' };
     }
 
-    // 5. 預設防呆
-    return 'defeat';
+    // 6. 若結算畫面 DOM 尚未填妥且停留時間小於 1200ms，標記為 pending 等待下一幀
+    if ((!rawGoTitle || !isStatsPopulated) && (performance.now() - (gameOverEnteredAt || performance.now()) < 1200)) {
+      return { result: 'pending', title: rawGoTitle };
+    }
+
+    // 7. 預設防呆
+    return { result: 'defeat', title: rawGoTitle || 'Unknown' };
   }
 
-  function isGameOverDefeat() {
-    return getGameOverResult() === 'defeat';
+  // 向下相容取得結算字串
+  function getGameOverResult() {
+    const evalRes = evaluateGameOverResult();
+    return evalRes.result === 'pending' ? 'defeat' : evalRes.result;
   }
 
+  /**
+   * 副本結算介面控制器 (Game Over Controller)
+   * 統一管理結算勝負統計、掉落物擲骰與自動重開流程
+   */
   function handleGameOver() {
     const gameover = document.getElementById('gameover');
     if (!gameover || gameover.classList.contains('hidden')) {
@@ -5705,27 +5849,27 @@
       gameOverEnteredAt = performance.now();
     }
 
-    // 0. 記錄勝負結算 (記錄通關、失敗與中斷次數，每局結算畫面僅記錄一次)
+    // 0. 記錄勝負結算 (單一數據來源判定，每局結算畫面僅記錄一次)
     if (!gameOverResultRecorded) {
-      const titleText = document.getElementById('go-title')?.textContent?.trim() || '';
-      const goStats = document.getElementById('go-stats');
-      const isStatsPopulated = Boolean(goStats && goStats.children && goStats.children.length > 0);
-
-      // 等待遊戲結算 DOM 填充完成（#go-stats 產生統計區塊且 #go-title 已由程式更新），避免未填入前靜態 HTML "Has muerto" 搶跑誤判
-      if ((!titleText || !isStatsPopulated) && (performance.now() - gameOverEnteredAt < 600)) {
-        return; // 等待最多 600ms 讓遊戲 DOM 填充完成
+      const evalRes = evaluateGameOverResult();
+      if (evalRes.result === 'pending') {
+        return; // 等待結算畫面完整填充或標題出現
       }
+
       gameOverResultRecorded = true;
       isCurrentRunActive = false; // 本局正常結算，解除局內鎖
       stopBattleMovement();
-      const result = getGameOverResult();
+      lastBankOpenedAt = 0; // 重置累積開箱計時器
+      combatAnchor = null;  // 重置近戰/走位錨點
+      currentMovementTarget = null;
 
-      if (result === 'victory') {
+      const titleText = evalRes.title;
+      if (evalRes.result === 'victory') {
         config.stats.victories = (config.stats.victories || 0) + 1;
         saveConfig();
         updateUIStats();
         console.log(`[RO Controller] 🎉 偵測到副本【成功通關】 (標題: [${titleText}])！累計通關次數: ${config.stats.victories}`);
-      } else if (result === 'aborted') {
+      } else if (evalRes.result === 'aborted') {
         config.stats.aborted = (config.stats.aborted || 0) + 1;
         saveConfig();
         updateUIStats();
@@ -5741,7 +5885,8 @@
     // 1. 若處於組隊掉落物分配階段，先自動執行掉落物擲骰 (Auto Loot Roll)
     handleLootSettlement();
 
-    if (!config.autoRestart) return;
+    // 🛡️ 關鍵守護：若尚未精確完成勝負結算紀錄，嚴禁提前啟動重啟倒數或點擊離開，徹底杜絕因過早跳轉大廳導致記為中斷 (aborted)
+    if (!gameOverResultRecorded || !config.autoRestart) return;
 
     const btnRestart = document.getElementById('btn-restart');
     // 若重新開始按鈕依然被鎖定 (disabled，例如伺服器正在計算分寶或等待隊友中)，等待其解鎖
@@ -5773,9 +5918,16 @@
           const curBtn = document.getElementById('btn-restart');
           const curGo = document.getElementById('gameover');
           if (curBtn && !curBtn.disabled && curGo && !curGo.classList.contains('hidden')) {
+            try {
+              if (typeof curBtn.onclick === 'function') {
+                curBtn.onclick({ isTrusted: false, bubbles: false, stopPropagation: () => {}, preventDefault: () => {} });
+              }
+            } catch (e) {}
             curBtn.click();
             curBtn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
             curBtn.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }));
+            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true }));
+            window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true }));
             config.stats.restarts++;
             saveConfig();
             updateUIStats();
@@ -6299,8 +6451,14 @@
     currentGameState = state;
     updateStateBadge(state);
 
-    // 🔑 自動登入、重連與選角色守護處理 (即使尚未手動啟動運作，只要開啟自動登入也能自動進入遊戲大廳)
-    if (config.autoLogin && !document.body.classList.contains('in-lobby') && handleSplashAndLogin(state)) {
+    // 🛡️ 戰鬥狀態全域被動金鐘罩（最高優先級常態守護）：
+    // 無論玩家是否開啟總開關（手動遊玩或自動輔助均生效），只要在戰鬥中，一律即時鎖定陷阱並消滅惡意即死 BOSS！
+    if (state === 'IN_COMBAT' || state === 'CARD_PICKER' || state === 'PAUSED') {
+      maintainBattleSecurityGuard();
+    }
+
+    // 🔑 自動登入、重連與選角色守護處理 (嚴格受總開關管控：只有在總開關啟用時才自動登入)
+    if (config.enabled && config.autoLogin && !document.body.classList.contains('in-lobby') && handleSplashAndLogin(state)) {
       return;
     }
 
@@ -6320,6 +6478,7 @@
       lobbyIdleStartAt = 0;
       if (!isCurrentRunActive) {
         isCurrentRunActive = true;
+        lastBankOpenedAt = performance.now(); // 局內重設累積開啟計時
         lastBattleWon = null; // 重置本局勝負捕獲狀態
         config.stats.runsStarted = (config.stats.runsStarted || 0) + 1;
         saveConfig();
@@ -6362,6 +6521,10 @@
     } else if (lastKnownGameState !== 'LOBBY') {
       // 剛從戰鬥結算、載入中或選角返回大廳：徹底重置所有導航計時與移動鍵
       releaseAllMovementKeys();
+      stopBattleMovement();
+      lastBankOpenedAt = 0; // 重置累積開箱排程計時
+      combatAnchor = null;
+      currentMovementTarget = null;
       festivalNavPhase = 0;
       navStepCount = 0;
       isWalkingToNpc = false;
@@ -6386,6 +6549,7 @@
 
     if (state !== 'CARD_PICKER') {
       cardPickerOpenedAt = 0;
+      syncStealthCardPickerUI(false);
     }
 
     switch (state) {
@@ -6426,6 +6590,7 @@
         if (performance.now() - cardPickerOpenedAt > watchdogThreshold) {
           console.warn(`[RO Controller] 🚨 偵測到選卡畫面卡死超過 ${(watchdogThreshold / 1000).toFixed(1)} 秒！看門狗強制介入自救選卡！`);
           updateStatus('🚨 選卡逾時自救：強制按鍵與點擊卡片...');
+          syncStealthCardPickerUI(false); // 🚨 看門狗自救時恢復顯示介面，確保玩家可視覺介入
           isPickingCard = false;
           pickedActionAttempts.clear();
           clearPickerRetry();
@@ -6460,15 +6625,28 @@
         }
 
         if (!isPickingCard) {
-          // 若為累積升級模式且開啟自動批次開啟，檢查是否有累積的升級待開
+          // 若為累積升級模式且開啟自動批次開啟，檢查是否有累積的升級待開 (支援秒數排程與等級動態自適應)
           if (config.levelUpMode === 'accumulate' && config.autoOpenBank) {
             const bankBtn = document.getElementById('bank-btn');
             if (bankBtn && !bankBtn.disabled && !bankBtn.classList.contains('hidden') && bankBtn.classList.contains('has')) {
-              const count = document.getElementById('bank-n')?.textContent || '1';
-              updateStatus(`📦 偵測到累積升級 (${count} 個)，開啟批次選卡...`);
-              bankBtn.click();
-              window.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', code: 'KeyB', bubbles: true }));
-              return;
+              const countStr = document.getElementById('bank-n')?.textContent || '1';
+              const bankCount = parseInt(countStr, 10) || 1;
+              const bGame = getActiveBattleGame();
+              if (shouldTriggerBankOpen(bGame, bankCount)) {
+                lastBankOpenedAt = performance.now();
+                updateStatus(`📦 滿足排程條件，開啟累積升級 (${bankCount} 個)...`);
+                try {
+                  if (typeof bankBtn.onclick === 'function') {
+                    bankBtn.onclick({ isTrusted: false, bubbles: false });
+                  }
+                } catch (e) {}
+                bankBtn.click();
+                if (bGame && typeof bGame.pressBank === 'function') {
+                  try { bGame.pressBank(); } catch (e) {}
+                }
+                window.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', code: 'KeyB', bubbles: true }));
+                return;
+              }
             }
           }
           const mapLabel = config.autoFestival || config.targetStage === 'louyang' ? '🏮 洛陽燈籠節' : '⚔️ 地圖';
@@ -6503,7 +6681,141 @@
   let currentItemSlotFilter = 'all';
   let currentItemSearchQuery = '';
 
-  function openItemsModal() {
+  
+  // ==========================================
+  // 8.1.1 核心技能神祇配置視窗 (Skill Deity Modal - 國際版專屬)
+  // 當角色達到 Lv 20 彈出選擇技能神祇 (Skill Deity) 視窗時，優先自動加冕指定的專屬技能
+  // ==========================================
+  function getSkillDeityPreferences(jobKey) {
+    const k = jobKey || config.selectedJob || 'swordsman';
+    if (!config.skillDeitySettings || typeof config.skillDeitySettings !== 'object') {
+      config.skillDeitySettings = {};
+    }
+    if (!Array.isArray(config.skillDeitySettings[k])) {
+      config.skillDeitySettings[k] = [];
+    }
+    // 自動防呆清理：過濾掉不存在於該職業可選清單中的無效殘留技能
+    const job = JOB_DATABASE[k];
+    if (job && Array.isArray(job.skills)) {
+      const validNames = new Set(job.skills.filter(s => s.id !== 'basic_attack').map(s => s.name));
+      config.skillDeitySettings[k] = config.skillDeitySettings[k].filter(name => validNames.has(name));
+    }
+    return config.skillDeitySettings[k];
+  }
+
+  function openSkillDeityModal() {
+    let modal = document.getElementById('ro-helper-deity-modal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'ro-helper-deity-modal';
+      document.body.appendChild(modal);
+    }
+    renderSkillDeityModalContent();
+    modal.style.display = 'flex';
+  }
+
+  function closeSkillDeityModal() {
+    const modal = document.getElementById('ro-helper-deity-modal');
+    if (modal) {
+      modal.style.display = 'none';
+    }
+    saveConfig();
+    renderJobSkills();
+  }
+
+  function renderSkillDeityModalContent() {
+    const modal = document.getElementById('ro-helper-deity-modal');
+    if (!modal) return;
+
+    const job = JOB_DATABASE[config.selectedJob];
+    if (!job) return;
+
+    const isEn = config.lang === 'en';
+    const curPref = getSkillDeityPreferences(config.selectedJob);
+
+    // 篩選可加冕神祇的技能 (排除普攻與被動恢復等)
+    const validSkills = (job.skills || []).filter(s => s.id !== 'basic_attack');
+
+    let rowsHtml = validSkills.map(skill => {
+      const idx = curPref.indexOf(skill.name);
+      const isSelected = idx !== -1;
+      const rankBadge = isSelected ? `<span style="background: #f59e0b; color: #000; font-weight: 800; font-size: 11px; padding: 2px 7px; border-radius: 10px;">#${idx + 1}</span>` : '';
+
+      return `
+        <div class="ro-modal-skill-row" data-skill="${skill.name}" style="align-items: center; border: 1px solid ${isSelected ? 'rgba(245, 158, 11, 0.4)' : 'rgba(255, 255, 255, 0.08)'}; background: ${isSelected ? 'rgba(245, 158, 11, 0.08)' : 'rgba(30, 41, 59, 0.3)'};">
+          <div class="ro-modal-skill-info" style="flex: 1;">
+            <div class="ro-modal-skill-name" style="display: flex; align-items: center; gap: 8px;">
+              <b>${isEn ? (skill.en || skill.name) : skill.name} ${isEn ? 'Deity' : '神祇'}</b>
+              ${rankBadge}
+              <small style="color: #94a3b8;">${isEn ? skill.name : skill.en}</small>
+            </div>
+            <div class="ro-modal-skill-desc" style="font-size: 11px; color: #cbd5e1; margin-top: 3px;">${skill.desc}</div>
+          </div>
+          <div class="ro-modal-skill-actions">
+            <button class="ro-modal-btn-act ${isSelected ? 'act-focus' : ''}" data-deity-act="toggle" data-skill="${skill.name}" style="min-width: 90px; border-color: ${isSelected ? '#f59e0b' : ''}; color: ${isSelected ? '#fbbf24' : ''};">
+              ${isSelected ? (isEn ? `✔ Selected (#${idx + 1})` : `✔ 首選第 ${idx + 1} 順位`) : (isEn ? `+ Add Priority` : `+ 加入順位`)}
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    modal.innerHTML = `
+      <style>
+        #ro-helper-deity-modal {
+          position: fixed;
+          top: 0; left: 0; right: 0; bottom: 0;
+          z-index: 999999999;
+          background: rgba(0, 0, 0, 0.75);
+          backdrop-filter: blur(6px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Microsoft JhengHei", sans-serif;
+        }
+      </style>
+      <div class="ro-modal-box" style="max-width: 620px; width: 92%; max-height: 85vh; display: flex; flex-direction: column; background: #0f172a; border-radius: 14px; border: 1px solid rgba(245, 158, 11, 0.35); box-shadow: 0 20px 40px rgba(0,0,0,0.8), 0 0 20px rgba(245, 158, 11, 0.15); color: #f8fafc;">
+        <div class="ro-modal-header" style="padding: 14px 18px; border-bottom: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: space-between;">
+          <div>
+            <div style="font-size: 16px; font-weight: 700; color: #fbbf24;">👑 ${job.name} - ${isEn ? 'Skill Deity Priority Settings' : '核心技能神祇加冕偏好順位'}</div>
+            <div style="font-size: 11px; color: #94a3b8; margin-top: 3px;">${isEn ? 'When reaching Lv 20, the helper automatically picks the highest priority Deity among your active skills.' : '國際版專屬機制：當角色達到 Lv 20 彈出神祇加冕視窗時，自動依據此順位為您持有的核心技能賦予神祇！'}</div>
+          </div>
+          <button id="ro-deity-modal-x" style="background: none; border: none; font-size: 20px; color: #94a3b8; cursor: pointer;">&times;</button>
+        </div>
+        <div class="ro-modal-body" style="padding: 14px 18px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 8px;">
+          ${rowsHtml}
+        </div>
+        <div class="ro-modal-footer" style="padding: 12px 18px; border-top: 1px solid rgba(255,255,255,0.1); display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.2);">
+          <div style="font-size: 11px; color: #64748b;">💡 ${isEn ? 'Click to toggle or adjust priority order.' : '點擊按鈕可依序設定優先度順位，首選未持有則遞補下一順位。'}</div>
+          <button id="ro-deity-modal-close-btn" class="ro-h-btn-test" style="background: #f59e0b; border: none; color: #000; font-weight: 700; padding: 7px 16px; border-radius: 6px; cursor: pointer;">
+            ${isEn ? 'Save & Close' : '💾 儲存並關閉'}
+          </button>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('ro-deity-modal-x').onclick = closeSkillDeityModal;
+    document.getElementById('ro-deity-modal-close-btn').onclick = closeSkillDeityModal;
+
+    modal.querySelectorAll('[data-deity-act="toggle"]').forEach(btn => {
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        const skillName = btn.getAttribute('data-skill');
+        const curList = getSkillDeityPreferences(config.selectedJob);
+        const idx = curList.indexOf(skillName);
+        if (idx !== -1) {
+          curList.splice(idx, 1);
+        } else {
+          curList.push(skillName);
+        }
+        config.skillDeitySettings[config.selectedJob] = curList;
+        saveConfig();
+        renderSkillDeityModalContent();
+      };
+    });
+  }
+
+function openItemsModal() {
     let modal = document.getElementById('ro-helper-items-modal');
     if (!modal) {
       modal = document.createElement('div');
@@ -6548,7 +6860,7 @@
       { id: 'elixir', name: isEn ? 'Elixir (10)' : '秘藥 (10)' },
       { id: 'blessing', name: isEn ? 'Blessing (10)' : '祝福 (10)' },
       { id: 'dish', name: isEn ? 'Dish (6)' : '料理 (6)' },
-      { id: 'deity', name: isEn ? 'Deity (13)' : '神祇 (13)' }
+      { id: 'deity', name: IS_HANS_SERVER ? (isEn ? 'Deity (13)' : '神祇 (13)') : (isEn ? 'Artifacts (13)' : '神器 (13)') }
     ];
 
     let tabsHtml = slots.map(s => {
@@ -7591,6 +7903,12 @@
 
     const bankAutoCb = document.getElementById('ro-h-bank-auto');
     if (bankAutoCb) bankAutoCb.checked = config.autoOpenBank;
+
+    const bankTriggerRow = document.getElementById('ro-h-bank-trigger-row');
+    if (bankTriggerRow) bankTriggerRow.style.display = (config.levelUpMode === 'accumulate' && config.autoOpenBank) ? 'flex' : 'none';
+
+    const bankTriggerSel = document.getElementById('ro-h-bank-trigger-mode');
+    if (bankTriggerSel) bankTriggerSel.value = config.bankTriggerMode || 'immediate';
   }
 
   function renderDifficultyModalContent() {
@@ -8083,7 +8401,7 @@
           <div class="ro-hist-item">
             <div class="ro-hist-item-header">
               <div class="ro-hist-item-meta">
-                <span class="ro-hist-type-badge ro-hist-type-${item.type || 'skill'}">${item.typeName || '⭐ 升級技能'}</span>
+                <span class="ro-hist-type-badge ro-hist-type-${item.type || 'skill'}" style="${item.type === 'deity' ? 'background: rgba(245, 158, 11, 0.25); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.45);' : (item.type === 'chest' ? 'background: rgba(168, 85, 247, 0.25); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.45);' : '')}">${item.typeName || '⭐ 升級技能'}</span>
                 <span class="ro-hist-time">${item.timeStr || ''}</span>
                 <span class="ro-hist-count">${item.totalCandidates || (item.candidates ? item.candidates.length : 0)} 項候選</span>
               </div>
@@ -8561,6 +8879,12 @@
           max-height: 80vh;
           overflow-y: auto;
         }
+        /* 🥷 隱藏選卡介面 (背景自動選取) 樣式：純視覺隱藏，DOM 尺寸與內部事件結構完整保留 */
+        #picker.ro-stealth-hide {
+          opacity: 0 !important;
+          pointer-events: none !important;
+          transition: opacity 0.15s ease;
+        }
         .ro-h-row {
           display: flex;
           align-items: center;
@@ -8922,6 +9246,15 @@
           </label>
         </div>
 
+        <div class="ro-h-row" id="ro-h-bank-trigger-row" style="display: ${config.levelUpMode === 'accumulate' && config.autoOpenBank ? 'flex' : 'none'}; padding-left: 14px;">
+          <span class="ro-h-label" style="font-size: 11px; color: #94a3b8;">${t('bank_trigger_mode')}</span>
+          <select id="ro-h-bank-trigger-mode" class="ro-h-select" style="font-size: 11px; max-width: 140px; padding: 2px 6px;">
+            <option value="immediate" ${config.bankTriggerMode === 'immediate' ? 'selected' : ''}>⚡ ${t('bank_mode_immediate')}</option>
+            <option value="interval_30" ${config.bankTriggerMode === 'interval_30' ? 'selected' : ''}>⏱️ ${t('bank_mode_interval_30')}</option>
+            <option value="interval_60" ${config.bankTriggerMode === 'interval_60' ? 'selected' : ''}>⏱️ ${t('bank_mode_interval_60')}</option>
+          </select>
+        </div>
+
         <button type="button" id="ro-h-open-diff-btn" class="ro-h-btn-secondary" style="width: 100%; justify-content: center; background: rgba(14, 165, 233, 0.15); border: 1px solid rgba(14, 165, 233, 0.35); color: #38bdf8; font-weight: 600; padding: 7px 10px; border-radius: 7px; cursor: pointer;">
           ${t('open_diff_modal')}
         </button>
@@ -9070,6 +9403,14 @@
           <span class="ro-h-label">${t('auto_pick_card')}</span>
           <label class="ro-h-switch">
             <input type="checkbox" id="ro-h-pick-card" ${config.autoPickCard ? 'checked' : ''}>
+            <span class="ro-h-slider"></span>
+          </label>
+        </div>
+
+        <div class="ro-h-row">
+          <span class="ro-h-label" title="${t('stealth_pick_tip')}">${t('stealth_pick_card')}</span>
+          <label class="ro-h-switch">
+            <input type="checkbox" id="ro-h-stealth-pick" ${config.stealthCardPicker ? 'checked' : ''}>
             <span class="ro-h-slider"></span>
           </label>
         </div>
@@ -9226,16 +9567,29 @@
     const bankAutoRow = document.getElementById('ro-h-bank-auto-row');
     const bankAutoCb = document.getElementById('ro-h-bank-auto');
 
+    const bankTriggerRow = document.getElementById('ro-h-bank-trigger-row');
+    const bankTriggerSel = document.getElementById('ro-h-bank-trigger-mode');
+
     levelUpSel.onchange = () => {
       config.levelUpMode = levelUpSel.value;
-      if (bankAutoRow) bankAutoRow.style.display = config.levelUpMode === 'accumulate' ? 'flex' : 'none';
+      const isAcc = config.levelUpMode === 'accumulate';
+      if (bankAutoRow) bankAutoRow.style.display = isAcc ? 'flex' : 'none';
+      if (bankTriggerRow) bankTriggerRow.style.display = (isAcc && config.autoOpenBank) ? 'flex' : 'none';
       saveConfig();
     };
 
     bankAutoCb.onchange = () => {
       config.autoOpenBank = bankAutoCb.checked;
+      if (bankTriggerRow) bankTriggerRow.style.display = (config.levelUpMode === 'accumulate' && config.autoOpenBank) ? 'flex' : 'none';
       saveConfig();
     };
+
+    if (bankTriggerSel) {
+      bankTriggerSel.onchange = () => {
+        config.bankTriggerMode = bankTriggerSel.value;
+        saveConfig();
+      };
+    }
 
     if (festivalCb) {
       festivalCb.onchange = () => {
@@ -9466,6 +9820,17 @@
     }
 
     pickCb.onchange = () => { config.autoPickCard = pickCb.checked; saveConfig(); };
+    const stealthPickCb = document.getElementById('ro-h-stealth-pick');
+    if (stealthPickCb) {
+      stealthPickCb.onchange = () => {
+        config.stealthCardPicker = stealthPickCb.checked;
+        saveConfig();
+        if (!config.stealthCardPicker) {
+          syncStealthCardPickerUI(false);
+        }
+        updateStatus(stealthPickCb.checked ? '🥷 已啟用隱藏選卡介面 (背景自動選擇)' : '👁️ 已停用隱藏選卡介面');
+      };
+    }
     if (rerollCb) {
       rerollCb.onchange = () => {
         config.autoRerollCards = rerollCb.checked;
@@ -9563,7 +9928,10 @@
     }).slice(0, 5).join(isEn ? ', ' : '、') + (curItemBanish.length > 5 ? '…' : '');
 
     const btnSkillsText = isEn ? `📋 Config [${job.name}] Skills & Affixes` : `📋 點此彈出【${job.name}】技能與詞綴偏好設定視窗`;
-    const btnItemsText = isEn ? `🎒 Config Items & Deity Blessings` : `🎒 點此彈出【關卡道具/神祇】專注與放逐設定視窗`;
+    const btnDeityText = isEn ? `👑 Config [${job.name}] Skill Deity (Lv 20)` : `👑 點此彈出【${job.name}】核心技能神祇 (Lv 20)`;
+    const btnItemsText = IS_HANS_SERVER
+      ? (isEn ? `🎒 Config Items & Deity Blessings` : `🎒 點此彈出【關卡道具/神祇】專注與放逐設定視窗`)
+      : (isEn ? `🎒 Config Items & Artifacts` : `🎒 點此彈出【關卡道具與神器】專注與放逐設定視窗`);
 
     jobSkillsContainer.innerHTML = `
       <div style="background: rgba(0,0,0,0.3); padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); display: flex; flex-direction: column; gap: 8px;">
@@ -9575,6 +9943,12 @@
           <span style="color: #f87171; font-weight: 600;">🚫 ${isEn ? 'Skill Banish' : '技能放逐'} (${banishCount}${isEn ? '' : '個'})：</span>${(curCfg.banish || []).join(isEn ? ', ' : '、') || noneText}<br>
           <span style="color: #38bdf8; font-weight: 600;">✨ ${isEn ? 'Preferred Affixes' : '偏好詞綴'} (${curAffixes.length}${isEn ? '' : '項'})：</span>${affixBadges}
         </div>
+
+        ${!IS_HANS_SERVER ? `
+        <button id="ro-h-open-deity-modal-btn" class="ro-h-btn-test" style="background: rgba(245, 158, 11, 0.22); border: 1px solid #f59e0b; color: #fbbf24; font-weight: 700; padding: 7px 10px; font-size: 12px; cursor: pointer; border-radius: 6px; box-shadow: 0 0 10px rgba(245, 158, 11, 0.2);">
+          ${btnDeityText}
+        </button>
+        ` : ''}
 
         <button id="ro-h-open-items-modal-btn" class="ro-h-btn-test" style="background: rgba(168, 85, 247, 0.25); border: 1px solid #a855f7; color: #c084fc; font-weight: 700; padding: 7px 10px; font-size: 12px; cursor: pointer; border-radius: 6px; box-shadow: 0 0 10px rgba(168, 85, 247, 0.2);">
           ${btnItemsText}
@@ -9591,6 +9965,11 @@
     if (openBtn) {
       openBtn.onclick = openSkillsModal;
     }
+    const openDeityBtn = document.getElementById('ro-h-open-deity-modal-btn');
+    if (openDeityBtn) {
+      openDeityBtn.onclick = openSkillDeityModal;
+    }
+
     const openItemsBtn = document.getElementById('ro-h-open-items-modal-btn');
     if (openItemsBtn) {
       openItemsBtn.onclick = openItemsModal;
