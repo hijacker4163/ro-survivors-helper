@@ -5,7 +5,7 @@
 <div align="center">
 
 [![Buy Me a Coffee](https://img.shields.io/badge/Ko--fi-請兔子喝杯咖啡-ff5e5b?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/martianrabbit)
-[![Version](https://img.shields.io/badge/Version-2.0.10-blue.svg?style=for-the-badge)](https://github.com/hijacker4163/ro-survivors-helper)
+[![Version](https://img.shields.io/badge/Version-2.0.11-blue.svg?style=for-the-badge)](https://github.com/hijacker4163/ro-survivors-helper)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 
 **🐰 位於南半球從火星下來的兔子程式員 (Martian Rabbit) 精心打造 🚀**  
@@ -13,6 +13,41 @@
 👉 **[點此贊助請喝咖啡 (Ko-fi)](https://ko-fi.com/martianrabbit)**
 
 </div>
+
+---
+
+## 🚀 v2.0.11 (2026-11-25) - 出發關卡/周目/升級與難度整合彈窗、累積升級死鎖修復與通關彈窗攔截
+
+### 🌟 核心更新與修復
+
+#### 0. 🗺️ 出發關卡、周目、升級方式與難易度配置大整合 (Stage & Difficulty Modal)
+- **UI 版面全面精簡與模組化 (Modal-Driven)**：
+  - 將原本擠在主控制面板的「目標關卡」、「目標周目」、「升級方式 (立即/累積)」、「自動開啟累積選卡」、「開箱排程頻率」與「難易度彈窗按鈕」，全面整合進單一的 **「🗺️ 出發關卡與難度配置」彈窗**。
+  - **主面板新增精緻即時摘要卡片 (TextView Badge)**：
+    - 主面板以單一精緻卡片即時展示當前配置摘要，如：`普隆德拉原野 ｜ 自動最新周目 ｜ 📦 累積(即開) ｜ ⚔️ 標準`。
+    - 點擊摘要卡片或配置按鈕即可一鍵展開彈窗進行微調，配置完成自動即時雙向同步。
+- **伺服器智能雙向適配 (國際版 vs 台版 HANS)**：
+  - **台版 HANS 伺服器**：彈窗內動態提供章節選擇、周目切換（自動最新 -1 / 維持當前 0 / 1~10 周目動態捕獲）、2 倍速勾選，以及最高 2000% (20.0x) 敵怪倍率與 Lv 1~20 刷關等級 (Tier) 拖曳。
+  - **官方國際版**：提供標準 5 大關卡難度滑桿（數量、傷害、生命、速度、事件）與出發關卡選擇，維持國際版介面純淨。
+
+#### 1. 📦 累積升級死鎖與移動罰站修復
+- **根除累積升級模式下偶發卡住不升級與角色罰站問題**：
+  - 移除了容易引起遊戲底層事件競態的多重觸發呼叫（如 `bGame.pressBank()` 與手動 `onclick`），回歸 v2.0.9 最穩定的純淨 DOM 點擊與 `KeyB` 派發機制。
+  - **開箱不中斷走位**：開箱觸發後不強制中斷走位循環，確保在選卡視窗正式渲染前走位持續順暢運作。
+  - **幽靈選卡鎖狀態守護 (Watchdog Guard)**：在 `IN_COMBAT` 戰鬥狀態開頭加入狀態保護，若畫面上無任何選卡介面卻殘留 `isPickingCard === true`，自動即時重置，徹底防止開箱與走位被死鎖凍結。
+
+#### 2. 📜 全域章節通關「未完待續……」劇情彈窗秒級放行 (`handleGlobalContinuanceDialog`)
+- **根除通關迷宮森林卡死問題**：
+  - 診斷出該彈窗（`<div class="ro-window npc-window">`）在部分情況下可能在尚未附加 `in-lobby` 樣式前即行彈出，導致舊有機制未能第一時間判定為對話狀態。
+  - **雙層守護重構**：
+    1. **全域無條件攔截 (`handleGlobalContinuanceDialog`)**：在 `mainLoop` 主迴圈最高優先順序常態執行，無論處於戰鬥、過渡或大廳狀態，一旦偵測到 `#npc-name` / `.ro-title` 為「未完待續……」或內文包含「你已抵達冒險的終點……暫時是這樣」，立即點擊 `<button class="ro-btn primary">接受</button>` 並派發 Pointer 事件放行。
+    2. **狀態機偵測擴充 (`detectGameState`)**：擴充狀態偵測 selector，納入 `.npc-window:not(.hidden)` 與 `.ro-window.npc-window:not(.hidden)`，確保非標準對話框亦能精準辨識為 `NPC_DIALOG`。
+
+#### 3. 🎮 台版 HANS 動態多周目 (`#lap-tabs`) 智能適配
+- **支援隨遊戲進度動態解鎖的周目系統**：
+  - 預設模式為 **「🚀 自動挑戰最新已解鎖周目 (-1)」**：自動選取最後一個無 🔒 的最高周目並點選，解鎖新周目時無須任何手動操作即可自動進階。
+  - 支援下拉選單指定 1~10 周目（未解鎖時具備自動防呆降級機制）以及「維持當前 (0)」。
+  - 動態 DOM 同步：當遊戲介面載入新周目時，自動同步至輔助控制面板與彈窗。
 
 ---
 

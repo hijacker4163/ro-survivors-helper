@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Survivors 控制中心 (RO Controller)
 // @namespace    https://github.com/hijacker4163/ro-survivors-helper
-// @version      2.0.10
+// @version      2.0.11
 // @description  RO Survivors 控制中心：整合穩定組隊系統 (隊長自動邀請/隊員原地待命自動同意)、相容 HANS 伺服器、全方位反作弊與反偵測金鐘罩、戰績持久化統計、自動拾取走位與多國語言支援
 // @author       Martian Rabbit
 // @homepage     https://github.com/hijacker4163/ro-survivors-helper
@@ -17,7 +17,7 @@
 (function () {
   'use strict';
 
-  const SCRIPT_VERSION = '2.0.10';
+  const SCRIPT_VERSION = '2.0.11';
 
   let activeBattleGameInstance = null;
   let lastBattleWon = null;
@@ -1169,6 +1169,24 @@
       btn_stop: '🛑 停止運作',
       current_job: '🎭 當前職業',
       target_stage: '🗺️ 目標挑戰關卡',
+      target_chapter: '📖 目標章節 (台版)',
+      target_lap: '🔄 目標周目 (台版)',
+      lap_auto: '🔄 維持當前 (不主動切換)',
+      lap_latest: '🚀 自動挑戰最新已解鎖周目',
+      lap_1: '一周目',
+      lap_2: '二周目',
+      lap_3: '三周目',
+      lap_4: '四周目',
+      lap_5: '五周目',
+      lap_6: '六周目',
+      lap_7: '七周目',
+      lap_8: '八周目',
+      lap_9: '九周目',
+      lap_10: '十周目',
+      ch_auto: '📖 維持當前/自動',
+      ch_1: '第一章',
+      ch_2: '第二章',
+      ch_99: '副本',
       levelup_mode: '⚡ 升級方式 (出發設定)',
       levelup_instant: '⚡ 立即升級 (每級暫停)',
       levelup_accumulate: '📦 累積升級 (整批選卡)',
@@ -1177,7 +1195,14 @@
       bank_mode_immediate: '即時開啟 (累積即開)',
       bank_mode_interval_30: '每 30 秒批次開啟',
       bank_mode_interval_60: '每 60 秒批次開啟',
-      open_diff_modal: '⚙️ 升級方式與難度配置彈窗...',
+      open_diff_modal: '🗺️ 關卡、周目與難度配置...',
+      stage_config_modal: '🗺️ 出發關卡與難度配置',
+      stage_summary_label: '🎯 當前出發配置摘要',
+      btn_config_stage: '🗺️ 配置出發關卡與難度...',
+      bank_trigger_freq: '開啟間隔頻率',
+      bank_immediate_tip: '偵測到升級點數時立即開啟選卡',
+      bank_30s_tip: '每隔 30 秒批次開啟累積之選卡',
+      bank_60s_tip: '每隔 60 秒批次開啟累積之選卡',
       auto_festival: '🏮 優先循環燈籠節活動 (洛陽)',
       auto_lobby: '🌐 自動隨機選大廳 (避開滿員)',
       auto_resume: '⏸️ 自動解除暫停 (切分頁/ESC)',
@@ -1284,6 +1309,24 @@
       btn_stop: '🛑 Stop Controller',
       current_job: '🎭 Current Class',
       target_stage: '🗺️ Target Stage',
+      target_chapter: '📖 Chapter (HANS)',
+      target_lap: '🔄 Lap/Cycle (HANS)',
+      lap_auto: '🔄 Current (Do not change)',
+      lap_latest: '🚀 Auto Highest Unlocked Lap',
+      lap_1: 'Lap 1',
+      lap_2: 'Lap 2',
+      lap_3: 'Lap 3',
+      lap_4: 'Lap 4',
+      lap_5: 'Lap 5',
+      lap_6: 'Lap 6',
+      lap_7: 'Lap 7',
+      lap_8: 'Lap 8',
+      lap_9: 'Lap 9',
+      lap_10: 'Lap 10',
+      ch_auto: '📖 Current / Auto',
+      ch_1: 'Chapter 1',
+      ch_2: 'Chapter 2',
+      ch_99: 'Raid',
       levelup_mode: '⚡ Level-up Mode',
       levelup_instant: '⚡ Instant (Pause per level)',
       levelup_accumulate: '📦 Accumulate (Batch open)',
@@ -1292,7 +1335,14 @@
       bank_mode_immediate: 'Immediate (Open on bank)',
       bank_mode_interval_30: 'Every 30 Seconds',
       bank_mode_interval_60: 'Every 60 Seconds (1 min)',
-      open_diff_modal: '⚙️ Mode & Difficulty Settings...',
+      open_diff_modal: '🗺️ Stage, Lap & Difficulty Settings...',
+      stage_config_modal: '🗺️ Stage & Difficulty Settings',
+      stage_summary_label: '🎯 Departure Config Summary',
+      btn_config_stage: '🗺️ Configure Stage & Difficulty...',
+      bank_trigger_freq: 'Open Frequency',
+      bank_immediate_tip: 'Open immediately on bank points',
+      bank_30s_tip: 'Batch open banked upgrades every 30s',
+      bank_60s_tip: 'Batch open banked upgrades every 60s',
       auto_festival: '🏮 Loop Lantern Festival (Louyang)',
       auto_lobby: '🌐 Auto Select Lobby (Avoid full)',
       auto_resume: '⏸️ Auto Resume (Tab/ESC)',
@@ -1642,6 +1692,8 @@
     autoSelectLobby: true,    // 自動隨機選擇大廳 (避開額滿大廳)
     autoFestival: false,      // 🏮 優先循環燈籠節活動 (洛陽刷扭蛋)
     targetStage: 'auto',      // 目標關卡 ID ('auto', 'prontera', 'payon_cave', 'louyang', 等)
+    targetChapter: 0,         // 🎯 目標章節 (0: 維持當前/自動, 1: 第一章, 2: 第二章, 99: 副本)
+    targetLap: -1,            // 🔄 目標周目 (-1: 🚀 自動挑戰最新已解鎖周目, 0: 維持當前不切換, 1~N: 指定固定周目)
     autoFocus: true,          // 自動專注 (Focus ×3 出現率) 核心優先技能
     focusKeywords: '狂擊, 怒爆, Bash, Magnum Break', // 🎯 指定專注技能名單
     autoBanish: true,         // 自動放逐 (Banish) 非優先/不需要技能
@@ -1760,6 +1812,12 @@
 
         if (typeof merged.auto2xSpeed !== 'boolean') {
           merged.auto2xSpeed = IS_HANS_SERVER;
+        }
+        if (typeof merged.targetChapter !== 'number') {
+          merged.targetChapter = 0;
+        }
+        if (typeof merged.targetLap !== 'number') {
+          merged.targetLap = 0;
         }
         if (typeof merged.autoAcceptPartyCheck !== 'boolean') {
           merged.autoAcceptPartyCheck = false;
@@ -2320,14 +2378,17 @@
     if (isVisible('wiki')) return 'WIKI_WINDOW';    // 6. 關卡選擇
     if (isVisible('stages')) return 'STAGES_WINDOW';
 
+    // 6.5 全域 NPC 對話框/劇情彈窗偵測 (無論是否帶有 in-lobby 類名)
+    const activeNpcDialog = document.querySelector('#npc-dialog:not(.hidden), .npc-window:not(.hidden), .ro-window.npc-window:not(.hidden)');
+    if (activeNpcDialog && activeNpcDialog.offsetWidth > 0) {
+      if (document.querySelector('#npc-dialog .lb-pick') || document.querySelector('#npc-dialog [data-lb]')) {
+        return 'LOBBY_PICKER';
+      }
+      return 'NPC_DIALOG';
+    }
+
     // 7. 大廳 (包含大廳內 NPC 對話框與分流選擇)
     if (document.body.classList.contains('in-lobby')) {
-      if (isVisible('npc-dialog')) {
-        if (document.querySelector('#npc-dialog .lb-pick') || document.querySelector('#npc-dialog [data-lb]')) {
-          return 'LOBBY_PICKER';
-        }
-        return 'NPC_DIALOG';
-      }
       return 'LOBBY';
     }
 
@@ -3583,6 +3644,68 @@
       const stgGo = document.getElementById('stg-go');
       const stagesList = document.getElementById('stg-list');
 
+      // 台版 HANS 專屬：章節分頁 (#ch-tabs) 與 周目分頁 (#lap-tabs) 自動選取
+      if (IS_HANS_SERVER) {
+        // A. 章節切換
+        if (config.targetChapter && config.targetChapter > 0) {
+          const chTab = document.querySelector(`#ch-tabs button[data-chtab="${config.targetChapter}"]`);
+          if (chTab && !chTab.classList.contains('primary') && !chTab.classList.contains('active')) {
+            if (!chTab.disabled && !chTab.textContent.includes('🔒')) {
+              updateStatus(`📖 [台版] 切換至指定章節 [${chTab.textContent.trim()}]...`);
+              chTab.click();
+              return; // 等待下一幀切換渲染
+            }
+          }
+        }
+        // B. 周目切換 (支援自動最新 -1、固定指定 1~N，或維持當前 0)
+        const lapTabsContainer = document.getElementById('lap-tabs');
+        if (lapTabsContainer) {
+          const allLapButtons = Array.from(lapTabsContainer.querySelectorAll('button[data-laptab]'));
+          
+          // 動態將遊戲畫面出現的新周目同步進輔助面板選項
+          const lapSel = document.getElementById('ro-h-lap');
+          if (lapSel) {
+            allLapButtons.forEach(btn => {
+              const lId = btn.dataset.laptab;
+              if (lId && !lapSel.querySelector(`option[value="${lId}"]`)) {
+                const newOpt = document.createElement('option');
+                newOpt.value = lId;
+                newOpt.textContent = `🔄 ${btn.textContent.replace('🔒', '').trim()}`;
+                lapSel.appendChild(newOpt);
+              }
+            });
+          }
+
+          if (config.targetLap === -1) {
+            // 模式 A：【自動挑戰最新已解鎖周目】(從後往前找最後一個未被鎖定 🔒 的周目按鈕)
+            const unlockedTabs = allLapButtons.filter(b => !b.disabled && !b.textContent.includes('🔒') && !b.classList.contains('locked'));
+            if (unlockedTabs.length > 0) {
+              const highestTab = unlockedTabs[unlockedTabs.length - 1];
+              if (!highestTab.classList.contains('primary') && !highestTab.classList.contains('active')) {
+                updateStatus(`🚀 [台版] 自動切換至最新解鎖周目: [${highestTab.textContent.trim()}]...`);
+                console.log(`[RO Controller] 切換至最新可用周目: [${highestTab.textContent.trim()}] (data-laptab: ${highestTab.dataset.laptab})`);
+                highestTab.click();
+                return; // 等待下一幀渲染關卡
+              }
+            }
+          } else if (config.targetLap > 0) {
+            // 模式 B：【指定固定周目】(例如指定一周目或二周目；若被鎖定則降級使用最新可用周目)
+            let lapTab = lapTabsContainer.querySelector(`button[data-laptab="${config.targetLap}"]`);
+            if (lapTab && (lapTab.disabled || lapTab.textContent.includes('🔒') || lapTab.classList.contains('locked'))) {
+              updateStatus(`⚠️ [台版] 目標周目尚未解鎖，降級切換至可用周目...`);
+              const unlockedTabs = allLapButtons.filter(b => !b.disabled && !b.textContent.includes('🔒') && !b.classList.contains('locked'));
+              lapTab = unlockedTabs.length > 0 ? unlockedTabs[unlockedTabs.length - 1] : null;
+            }
+            if (lapTab && !lapTab.classList.contains('primary') && !lapTab.classList.contains('active')) {
+              updateStatus(`🔄 [台版] 切換至目標周目 [${lapTab.textContent.trim()}]...`);
+              lapTab.click();
+              return; // 等待下一幀切換渲染
+            }
+          }
+          // 模式 C：config.targetLap === 0 (維持遊戲當前已選周目，不主動點擊切換)
+        }
+      }
+
       // 檢查是否需要指定特定關卡 (非燈籠節且非 auto)
       if (!isFestivalTarget && config.targetStage && config.targetStage !== 'auto') {
         const targetCfg = STAGES_CONFIG.find(s => s.id === config.targetStage);
@@ -3663,7 +3786,9 @@
 
     // 3. 難度 / 升級方式 / 出發確認視窗 (NPC Dialog)
     if (state === 'NPC_DIALOG') {
-      const dialog = document.getElementById('npc-dialog');
+      const dialog = document.getElementById('npc-dialog') ||
+                     document.querySelector('.npc-window:not(.hidden)') ||
+                     document.querySelector('.ro-window.npc-window:not(.hidden)');
       if (!dialog || dialog.classList.contains('hidden')) return;
 
       const dialogFullText = (dialog.textContent || '').toLowerCase();
@@ -3736,6 +3861,28 @@
           updateStatus('⏳ 組隊隊員尚未全數在廣場就緒，等待隊友中...');
           showToast('⏳ 隊員尚未全數在廣場就緒，等待隊友回到廣場...', 3000);
           okBtn.click();
+          return;
+        }
+      }
+
+      // 3.2.0 自動確認通關劇情「未完待續……」彈窗 (點擊「接受」)
+      // 例如通關迷宮森林後跳出「你已抵達冒險的終點……暫時是這樣。你的故事很快就會繼續」，必須自動點擊「接受」
+      const npcTitleText = (dialog.querySelector('#npc-name')?.textContent || dialog.querySelector('.npc-title')?.textContent || '').trim();
+      const isContinuanceDialog = npcTitleText.includes('未完待續') ||
+                                  dialogFullText.includes('抵達冒險的終點') ||
+                                  dialogFullText.includes('故事很快就會繼續') ||
+                                  dialogFullText.includes('continuará') ||
+                                  dialogFullText.includes('to be continued');
+      if (isContinuanceDialog) {
+        const acceptBtn = dialog.querySelector('#npc-options button.primary') ||
+          Array.from(dialog.querySelectorAll('#npc-options button')).find(b => {
+            const t = (b.textContent || '').toLowerCase();
+            return t.includes('接受') || t.includes('accept') || t.includes('aceptar') || t.includes('vale');
+          });
+        if (acceptBtn) {
+          updateStatus('📜 偵測到章節結尾「未完待續」劇情彈窗，自動點擊「接受」...');
+          showToast('📜 自動接受章節通關劇情...', 2000);
+          acceptBtn.click();
           return;
         }
       }
@@ -5940,6 +6087,51 @@
     }
   }
 
+  /**
+   * 📜 全域攔截通關劇情「未完待續……」彈窗 (點擊「接受」)
+   * 例如通關迷宮森林後彈出「未完待續…… / 你已抵達冒險的終點……暫時是這樣。你的故事很快就會繼續」，
+   * 無論處於任何遊戲狀態 (LOBBY, NPC_DIALOG, UNKNOWN 等) 均即時放行。
+   */
+  function handleGlobalContinuanceDialog() {
+    // 檢查包含 .npc-window, #npc-dialog 或任何帶有 id/class 的 NPC 對話視窗
+    const dialogs = document.querySelectorAll('#npc-dialog, .npc-window, .ro-window.npc-window');
+    for (const dialog of dialogs) {
+      if (!dialog || dialog.classList.contains('hidden') || dialog.offsetWidth === 0) continue;
+      const titleEl = dialog.querySelector('#npc-name') || dialog.querySelector('.npc-title') || dialog.querySelector('.ro-title');
+      const titleText = (titleEl ? titleEl.textContent : '').trim().toLowerCase();
+      const bodyText = (dialog.textContent || '').toLowerCase();
+
+      const isContinuance = titleText.includes('未完待續') ||
+                            titleText.includes('continuará') ||
+                            titleText.includes('to be continued') ||
+                            bodyText.includes('未完待續') ||
+                            bodyText.includes('抵達冒險的終點') ||
+                            bodyText.includes('冒險的終點') ||
+                            bodyText.includes('故事很快就會繼續') ||
+                            bodyText.includes('接下來的關卡將在新的更新中推出');
+
+      if (isContinuance) {
+        const acceptBtn = dialog.querySelector('#npc-options button.primary') ||
+                          dialog.querySelector('.btn-row button.primary') ||
+                          Array.from(dialog.querySelectorAll('button')).find(b => {
+                            const t = (b.textContent || '').trim().toLowerCase();
+                            return t.includes('接受') || t.includes('accept') || t.includes('aceptar') || t.includes('vale') || t.includes('ok');
+                          });
+        if (acceptBtn) {
+          updateStatus('📜 偵測到章節結尾「未完待續」劇情彈窗，自動點擊「接受」...');
+          showToast('📜 自動接受章節通關劇情...', 2000);
+          acceptBtn.click();
+          try {
+            acceptBtn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+            acceptBtn.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }));
+          } catch (e) {}
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   function handleStory() {
     const story = document.getElementById('story');
     if (story && !story.classList.contains('hidden')) {
@@ -6454,6 +6646,11 @@
     currentGameState = state;
     updateStateBadge(state);
 
+    // 📜 章節通關結尾「未完待續……」全域最高優先級攔截放行
+    if (handleGlobalContinuanceDialog()) {
+      return;
+    }
+
     // 🛡️ 戰鬥狀態全域被動金鐘罩（最高優先級常態守護）：
     // 無論玩家是否開啟總開關（手動遊玩或自動輔助均生效），只要在戰鬥中，一律即時鎖定陷阱並消滅惡意即死 BOSS！
     if (state === 'IN_COMBAT' || state === 'CARD_PICKER' || state === 'PAUSED') {
@@ -6613,6 +6810,17 @@
         handleCardPicker();
         break;
       case 'IN_COMBAT':
+        // 🛡️ 看門狗防呆：若已回到戰鬥中且無選卡視窗，強制解除 isPickingCard 避免走位與開箱被凍結
+        const curPickerEl = document.getElementById('picker');
+        if (!curPickerEl || curPickerEl.classList.contains('hidden')) {
+          if (isPickingCard) {
+            isPickingCard = false;
+            cardPickerOpenedAt = 0;
+            pickedActionAttempts.clear();
+            syncStealthCardPickerUI(false);
+          }
+        }
+
         handleInRunDropReveal();
         // 🛡️ 戰鬥狀態全局守護：不管是否開啟自動走位，進入戰鬥狀態均常態維護陷阱與即死狀態
         maintainBattleSecurityGuard();
@@ -6638,17 +6846,11 @@
               if (shouldTriggerBankOpen(bGame, bankCount)) {
                 lastBankOpenedAt = performance.now();
                 updateStatus(`📦 滿足排程條件，開啟累積升級 (${bankCount} 個)...`);
-                try {
-                  if (typeof bankBtn.onclick === 'function') {
-                    bankBtn.onclick({ isTrusted: false, bubbles: false });
-                  }
-                } catch (e) {}
+                // 恢復 v2.0.9 最穩定觸發：單純點擊按鈕並派發 KeyB，避免多重呼叫引起遊戲內部狀態競態
                 bankBtn.click();
-                if (bGame && typeof bGame.pressBank === 'function') {
-                  try { bGame.pressBank(); } catch (e) {}
-                }
                 window.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', code: 'KeyB', bubbles: true }));
-                return;
+                // 開箱後不阻斷走位，讓走位持續運作直到 picker 正式渲染
+                
               }
             }
           }
@@ -7874,8 +8076,65 @@ function openItemsModal() {
     });
   }
 
+  /**
+   * 🗺️ 取得出發設定摘要文字 (用於主面板即時 TextView 展示)
+   */
+  function getStageDifficultySummary() {
+    const isEn = config.lang === 'en';
+    const curStage = STAGES_CONFIG.find(s => s.id === config.targetStage) || STAGES_CONFIG[0];
+    const stageName = isEn ? (curStage.en || curStage.name) : curStage.name;
+    let stageShort = stageName.replace(/^[0-9]+\.\s*/, '').replace(/（.*）|\(.*?\)/g, '').trim();
+    if (curStage.id === 'auto') stageShort = isEn ? 'Auto Latest' : '自動最新';
+
+    let lapText = '';
+    if (IS_HANS_SERVER) {
+      if (config.targetLap === -1) {
+        lapText = isEn ? 'Auto Lap' : '自動最新周目';
+      } else if (config.targetLap === 0) {
+        lapText = isEn ? 'Current Lap' : '當前周目';
+      } else {
+        lapText = isEn ? `Lap ${config.targetLap}` : `${config.targetLap}周目`;
+      }
+    }
+
+    let levelUpText = '';
+    if (config.levelUpMode === 'accumulate') {
+      const mode = config.bankTriggerMode || 'immediate';
+      let freq = isEn ? 'Instant' : '即開';
+      if (mode === 'interval_30') freq = '30s';
+      if (mode === 'interval_60') freq = '60s';
+      levelUpText = isEn ? `📦 Bank(${freq})` : `📦 累積(${freq})`;
+    } else {
+      levelUpText = isEn ? '⚡ Instant' : '⚡ 立即';
+    }
+
+    let diffText = '';
+    if (config.customDiffEnabled && config.difficulty) {
+      if (IS_HANS_SERVER && config.difficulty.tier) {
+        diffText = `⚔️ Lv.${Math.round(config.difficulty.tier)} (${Math.round(config.difficulty.count * 100)}%)`;
+      } else {
+        diffText = `⚔️ ${Math.round(config.difficulty.count * 100)}%`;
+      }
+    } else {
+      diffText = isEn ? '⚔️ Standard' : '⚔️ 標準';
+    }
+
+    if (IS_HANS_SERVER) {
+      return `${stageShort} ｜ ${lapText} ｜ ${levelUpText} ｜ ${diffText}`;
+    } else {
+      return `${stageShort} ｜ ${levelUpText} ｜ ${diffText}`;
+    }
+  }
+
+  function updateStageSummaryTextView() {
+    const tv = document.getElementById('ro-h-stage-summary-text');
+    if (tv) {
+      tv.textContent = getStageDifficultySummary();
+    }
+  }
+
   // ==========================================
-  // 8.2 出發升級與難度配置彈窗 (Difficulty & Level-up Modal)
+  // 8.2 出發關卡、周目與難度配置彈窗 (Stage, Lap & Difficulty Modal)
   // ==========================================
   function openDifficultyModal() {
     let modal = document.getElementById('ro-helper-difficulty-modal');
@@ -7895,23 +8154,14 @@ function openItemsModal() {
     }
     saveConfig();
     updateUIElementsFromConfig();
+    updateStageSummaryTextView();
   }
 
   function updateUIElementsFromConfig() {
-    const levelModeSelect = document.getElementById('ro-h-levelup-mode');
-    if (levelModeSelect) levelModeSelect.value = config.levelUpMode;
+    const jobSelect = document.getElementById('ro-h-job');
+    if (jobSelect) jobSelect.value = config.selectedJob || 'swordsman';
 
-    const bankAutoRow = document.getElementById('ro-h-bank-auto-row');
-    if (bankAutoRow) bankAutoRow.style.display = config.levelUpMode === 'accumulate' ? 'flex' : 'none';
-
-    const bankAutoCb = document.getElementById('ro-h-bank-auto');
-    if (bankAutoCb) bankAutoCb.checked = config.autoOpenBank;
-
-    const bankTriggerRow = document.getElementById('ro-h-bank-trigger-row');
-    if (bankTriggerRow) bankTriggerRow.style.display = (config.levelUpMode === 'accumulate' && config.autoOpenBank) ? 'flex' : 'none';
-
-    const bankTriggerSel = document.getElementById('ro-h-bank-trigger-mode');
-    if (bankTriggerSel) bankTriggerSel.value = config.bankTriggerMode || 'immediate';
+    updateStageSummaryTextView();
   }
 
   function renderDifficultyModalContent() {
@@ -7921,7 +8171,6 @@ function openItemsModal() {
     if (!config.difficulty) {
       config.difficulty = { count: 1.0, damage: 1.0, hp: 1.0, speed: 1.0, events: 1.0, tier: 1 };
     }
-    // 確保 tier 存在（舊版設定補全）
     if (config.difficulty.tier === undefined) config.difficulty.tier = 1;
 
     const isEn = config.lang === 'en';
@@ -7929,7 +8178,6 @@ function openItemsModal() {
     const isInstant = config.levelUpMode === 'instant';
     const isAccumulate = config.levelUpMode === 'accumulate';
     const isCustom = !!config.customDiffEnabled;
-    // 台版 HANS 的刷關等級 (tier) slider
     const tierVal = Math.round(diff.tier) || 1;
 
     modal.innerHTML = `
@@ -7950,7 +8198,7 @@ function openItemsModal() {
           background: #0f172a;
           border: 1px solid rgba(255, 255, 255, 0.15);
           border-radius: 14px;
-          width: 500px;
+          width: 520px;
           max-width: 95vw;
           max-height: 88vh;
           display: flex;
@@ -8044,6 +8292,20 @@ function openItemsModal() {
           color: #94a3b8;
           line-height: 1.35;
         }
+        .ro-diff-select-input {
+          width: 100%;
+          background: #1e293b;
+          border: 1px solid rgba(255, 255, 255, 0.15);
+          color: #f8fafc;
+          border-radius: 6px;
+          padding: 7px 10px;
+          font-size: 12px;
+          outline: none;
+          box-sizing: border-box;
+        }
+        .ro-diff-select-input:focus {
+          border-color: #38bdf8;
+        }
         .ro-diff-slider-row {
           display: flex;
           align-items: center;
@@ -8121,16 +8383,50 @@ function openItemsModal() {
       <div class="ro-diff-box">
         <div class="ro-diff-header">
           <div class="ro-diff-title">
-            <span>⚙️ ${isEn ? 'Level-up & Difficulty Settings' : '出發升級與難度配置'}</span>
+            <span>🗺️ ${isEn ? 'Stage & Difficulty Configuration' : '出發關卡、周目與難度配置'}</span>
           </div>
           <button class="ro-diff-close-x" id="ro-diff-close-x">✕</button>
         </div>
 
         <div class="ro-diff-body">
-          <!-- 升級方式區塊 -->
+          <!-- 1. 目標挑戰關卡與台版周目選擇 -->
           <div>
             <div class="ro-diff-section-title">
-              <span>⚡ ${isEn ? 'Level-up Strategy' : '升級方式 (Level-up Strategy)'}</span>
+              <span>🗺️ ${isEn ? 'Target Stage Selection' : '目標挑戰關卡 (Target Stage)'}</span>
+            </div>
+            <select class="ro-diff-select-input" id="ro-modal-stage">
+              ${STAGES_CONFIG.map(s => `<option value="${s.id}" ${config.targetStage === s.id ? 'selected' : ''}>${isEn ? (s.en || s.name) : s.name}</option>`).join('')}
+            </select>
+
+            ${IS_HANS_SERVER ? `
+            <div style="margin-top: 10px;">
+              <div class="ro-diff-section-title" style="margin-bottom: 6px;">
+                <span>🔄 ${isEn ? 'Lap / Cycle (HANS Server)' : '目標周目 (台版 HANS 專屬)'}</span>
+              </div>
+              <select class="ro-diff-select-input" id="ro-modal-lap">
+                <option value="-1" ${config.targetLap === -1 ? 'selected' : ''}>🚀 ${isEn ? 'Auto Highest Unlocked Lap' : '自動挑戰最新已解鎖周目'}</option>
+                <option value="0" ${config.targetLap === 0 ? 'selected' : ''}>🔄 ${isEn ? 'Current Lap (Do not change)' : '維持當前 (不主動切換)'}</option>
+                <option value="1" ${config.targetLap === 1 ? 'selected' : ''}>🔄 ${isEn ? 'Lap 1' : '一周目'}</option>
+                <option value="2" ${config.targetLap === 2 ? 'selected' : ''}>🔄 ${isEn ? 'Lap 2' : '二周目'}</option>
+                <option value="3" ${config.targetLap === 3 ? 'selected' : ''}>🔄 ${isEn ? 'Lap 3' : '三周目'}</option>
+                <option value="4" ${config.targetLap === 4 ? 'selected' : ''}>🔄 ${isEn ? 'Lap 4' : '四周目'}</option>
+                <option value="5" ${config.targetLap === 5 ? 'selected' : ''}>🔄 ${isEn ? 'Lap 5' : '五周目'}</option>
+                <option value="6" ${config.targetLap === 6 ? 'selected' : ''}>🔄 ${isEn ? 'Lap 6' : '六周目'}</option>
+                <option value="7" ${config.targetLap === 7 ? 'selected' : ''}>🔄 ${isEn ? 'Lap 7' : '七周目'}</option>
+                <option value="8" ${config.targetLap === 8 ? 'selected' : ''}>🔄 ${isEn ? 'Lap 8' : '八周目'}</option>
+                <option value="9" ${config.targetLap === 9 ? 'selected' : ''}>🔄 ${isEn ? 'Lap 9' : '九周目'}</option>
+                <option value="10" ${config.targetLap === 10 ? 'selected' : ''}>🔄 ${isEn ? 'Lap 10' : '十周目'}</option>
+              </select>
+            </div>
+            ` : ''}
+          </div>
+
+          <hr style="border: none; border-top: 1px solid rgba(255, 255, 255, 0.08); margin: 0;">
+
+          <!-- 2. 升級方式與開箱策略 -->
+          <div>
+            <div class="ro-diff-section-title">
+              <span>⚡ ${isEn ? 'Level-up Strategy & Bank Schedule' : '升級方式與開箱排程 (Level-up Strategy)'}</span>
             </div>
             <div class="ro-diff-cards-grid">
               <div class="ro-diff-card ${isInstant ? 'active' : ''}" id="ro-diff-card-instant">
@@ -8142,12 +8438,27 @@ function openItemsModal() {
                 <div class="ro-diff-card-desc">${isEn ? 'No pause: points bank up, press B or click to bulk-select cards in one go.' : '戰鬥不暫停：升級點數儲存，按 B 或點擊一次連續批量選卡。'}</div>
               </div>
             </div>
-            <div style="margin-top: 8px; display: flex; align-items: center; gap: 8px; font-size: 12px; color: #94a3b8;">
-              <input type="checkbox" id="ro-diff-auto-bank" ${config.autoOpenBank ? 'checked' : ''} style="cursor: pointer; accent-color: #38bdf8;">
-              <label for="ro-diff-auto-bank" style="cursor: pointer;">${isEn ? 'Auto open card selection when upgrades are banked during combat (Press B)' : '戰鬥中偵測到累積升級時自動開啟選卡 (按 B)'}</label>
+
+            <!-- 累積升級專屬參數 -->
+            <div id="ro-diff-bank-options" style="display: ${isAccumulate ? 'block' : 'none'}; margin-top: 10px; background: rgba(30, 41, 59, 0.4); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px 12px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                <label for="ro-diff-auto-bank" style="cursor: pointer; font-size: 12px; color: #cbd5e1; display: flex; align-items: center; gap: 6px;">
+                  <input type="checkbox" id="ro-diff-auto-bank" ${config.autoOpenBank ? 'checked' : ''} style="cursor: pointer; accent-color: #38bdf8;">
+                  <span>${isEn ? 'Auto open card selection during combat (Key B)' : '戰鬥中自動開啟批次選卡 (按 B)'}</span>
+                </label>
+              </div>
+              <div style="display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: #94a3b8;">
+                <span>⏱️ ${isEn ? 'Open Frequency' : '開啟間隔排程'}</span>
+                <select id="ro-modal-bank-trigger" class="ro-diff-select-input" style="width: 170px; padding: 4px 8px; font-size: 11px;">
+                  <option value="immediate" ${config.bankTriggerMode === 'immediate' ? 'selected' : ''}>⚡ ${isEn ? 'Immediate (Instant)' : '即時開啟 (累積即開)'}</option>
+                  <option value="interval_30" ${config.bankTriggerMode === 'interval_30' ? 'selected' : ''}>⏱️ ${isEn ? 'Every 30 Seconds' : '每 30 秒批次開啟'}</option>
+                  <option value="interval_60" ${config.bankTriggerMode === 'interval_60' ? 'selected' : ''}>⏱️ ${isEn ? 'Every 60 Seconds' : '每 60 秒批次開啟'}</option>
+                </select>
+              </div>
             </div>
+
             ${IS_HANS_SERVER ? `
-            <div style="margin-top: 6px; display: flex; align-items: center; gap: 8px; font-size: 12px; color: #94a3b8;">
+            <div style="margin-top: 8px; display: flex; align-items: center; gap: 8px; font-size: 12px; color: #94a3b8;">
               <input type="checkbox" id="ro-diff-auto-2x" ${config.auto2xSpeed ? 'checked' : ''} style="cursor: pointer; accent-color: #38bdf8;">
               <label for="ro-diff-auto-2x" style="cursor: pointer; color: #38bdf8; font-weight: 600;">⚡ ${isEn ? 'Auto enable 2x speed in solo runs (HANS)' : '單人遠征進場自動開啟 2 倍速 (台版 HANS 專屬)'}</label>
             </div>
@@ -8156,7 +8467,7 @@ function openItemsModal() {
 
           <hr style="border: none; border-top: 1px solid rgba(255, 255, 255, 0.08); margin: 0;">
 
-          <!-- 關卡難度拖曳區塊 -->
+          <!-- 3. 出發關卡難度設定 (國際版 vs 台版) -->
           <div>
             <div class="ro-diff-section-title">
               <span>🎮 ${isEn ? 'Stage Difficulty Sliders' : '出發關卡難度設定 (Difficulty Sliders)'}</span>
@@ -8167,7 +8478,6 @@ function openItemsModal() {
             </div>
 
             <div id="ro-diff-sliders-container" style="opacity: ${isCustom ? '1' : '0.5'}; pointer-events: ${isCustom ? 'auto' : 'none'}; transition: opacity 0.2s;">
-              <!-- 難度滑桿：依伺服器自動適配上限 (台版 HANS 全部可達 2000%，國際版 count=350%, damage=175%, hp=250%, speed=175%, events=250%) -->
               <div class="ro-diff-slider-row">
                 <span class="ro-diff-slider-label">👾 ${isEn ? 'Enemy Count' : '敵人數量 (Count)'}</span>
                 <input type="range" class="ro-diff-slider-input" data-key="count" min="1.0" max="${IS_HANS_SERVER ? '20.0' : '3.5'}" step="0.05" value="${diff.count}">
@@ -8206,7 +8516,7 @@ function openItemsModal() {
               </div>
               ` : ''}
 
-              <!-- 快捷難度預設按鈕 (適配台版與國際版不同全滿與農怪倍率) -->
+              <!-- 快捷難度預設按鈕 -->
               <div class="ro-diff-presets">
                 <button type="button" class="ro-diff-preset-btn" data-preset="standard">🛡️ ${isEn ? 'Standard (100% all)' : '預設標準 (全100%)'}</button>
                 <button type="button" class="ro-diff-preset-btn" data-preset="farm">🌾 ${IS_HANS_SERVER ? (isEn ? 'Farming (Count 500% Events 500%)' : '農怪專用 (量500%事500%)') : (isEn ? 'Farming (Count 250% Events 200%)' : '農怪專用 (量250%事200%)')}</button>
@@ -8222,10 +8532,45 @@ function openItemsModal() {
       </div>
     `;
 
-    // 綁定事件
+    // 關卡與周目事件監聽
+    const stageSelModal = document.getElementById('ro-modal-stage');
+    if (stageSelModal) {
+      stageSelModal.onchange = () => {
+        config.targetStage = stageSelModal.value;
+        if (config.targetStage === 'louyang') {
+          config.autoFestival = !IS_HANS_SERVER;
+        } else {
+          config.autoFestival = false;
+        }
+      };
+    }
+
+    const lapSelModal = document.getElementById('ro-modal-lap');
+    if (lapSelModal) {
+      const lapTabs = document.querySelectorAll('#lap-tabs button[data-laptab]');
+      if (lapTabs.length > 0) {
+        lapTabs.forEach(tab => {
+          const lNum = tab.dataset.laptab;
+          if (lNum && !lapSelModal.querySelector(`option[value="${lNum}"]`)) {
+            const opt = document.createElement('option');
+            opt.value = lNum;
+            opt.textContent = `🔄 ${tab.textContent.replace('🔒', '').trim()}`;
+            lapSelModal.appendChild(opt);
+          }
+        });
+        lapSelModal.value = String(config.targetLap !== undefined ? config.targetLap : -1);
+      }
+      lapSelModal.onchange = () => {
+        config.targetLap = parseInt(lapSelModal.value, 10) || 0;
+      };
+    }
+
+    // 升級方式與開箱事件
     const cardInstant = document.getElementById('ro-diff-card-instant');
     const cardAccumulate = document.getElementById('ro-diff-card-accumulate');
+    const bankOptionsDiv = document.getElementById('ro-diff-bank-options');
     const autoBankCb = document.getElementById('ro-diff-auto-bank');
+    const bankTriggerSelModal = document.getElementById('ro-modal-bank-trigger');
     const customCb = document.getElementById('ro-diff-enable-custom');
     const slidersContainer = document.getElementById('ro-diff-sliders-container');
 
@@ -8233,17 +8578,25 @@ function openItemsModal() {
       config.levelUpMode = 'instant';
       cardInstant.classList.add('active');
       cardAccumulate.classList.remove('active');
+      if (bankOptionsDiv) bankOptionsDiv.style.display = 'none';
     };
 
     cardAccumulate.onclick = () => {
       config.levelUpMode = 'accumulate';
       cardAccumulate.classList.add('active');
       cardInstant.classList.remove('active');
+      if (bankOptionsDiv) bankOptionsDiv.style.display = 'block';
     };
 
     if (autoBankCb) {
       autoBankCb.onchange = () => {
         config.autoOpenBank = autoBankCb.checked;
+      };
+    }
+
+    if (bankTriggerSelModal) {
+      bankTriggerSelModal.onchange = () => {
+        config.bankTriggerMode = bankTriggerSelModal.value;
       };
     }
 
@@ -8268,7 +8621,6 @@ function openItemsModal() {
       const valEl = document.getElementById(`val-${key}`);
       slider.oninput = () => {
         const numVal = parseFloat(slider.value);
-        // tier 為台版 HANS 刷關等級，以整數 Lv N 顯示；其餘以百分比顯示
         if (key === 'tier') {
           config.difficulty[key] = Math.round(numVal);
           if (valEl) valEl.textContent = `Lv ${Math.round(numVal)}`;
@@ -8283,7 +8635,7 @@ function openItemsModal() {
     modal.querySelectorAll('.ro-diff-preset-btn').forEach(btn => {
       btn.onclick = () => {
         const preset = btn.dataset.preset;
-        const currentTier = config.difficulty.tier || 1; // 保留刷關等級不受預設重置影響
+        const currentTier = config.difficulty.tier || 1;
         if (preset === 'standard') {
           config.difficulty = { count: 1.0, damage: 1.0, hp: 1.0, speed: 1.0, events: 1.0, tier: currentTier };
         } else if (preset === 'farm') {
@@ -8294,10 +8646,8 @@ function openItemsModal() {
           }
         } else if (preset === 'max') {
           if (IS_HANS_SERVER) {
-            // 台版 HANS 全部可拉滿至 2000% (20.0)
             config.difficulty = { count: 20.0, damage: 20.0, hp: 20.0, speed: 20.0, events: 20.0, tier: currentTier };
           } else {
-            // 國際版上限: count 3.5, damage 1.75, hp 2.5, speed 1.75, events 2.5
             config.difficulty = { count: 3.5, damage: 1.75, hp: 2.5, speed: 1.75, events: 2.5, tier: currentTier };
           }
         }
@@ -8314,8 +8664,16 @@ function openItemsModal() {
       };
     });
 
-    document.getElementById('ro-diff-close-x').onclick = closeDifficultyModal;
-    document.getElementById('ro-diff-save-btn').onclick = closeDifficultyModal;
+    // 關閉與儲存按鈕事件
+    const closeX = document.getElementById('ro-diff-close-x');
+    const saveBtn = document.getElementById('ro-diff-save-btn');
+    if (closeX) closeX.onclick = closeDifficultyModal;
+    if (saveBtn) {
+      saveBtn.onclick = () => {
+        closeDifficultyModal();
+        showToast(isEn ? '💾 Stage & Difficulty Saved' : '💾 已儲存關卡與難度配置', 1500);
+      };
+    }
   }
 
   // ==========================================
@@ -9226,41 +9584,21 @@ function openItemsModal() {
 
         <div id="ro-h-job-skills-container"></div>
 
-        <div class="ro-h-row">
-          <span class="ro-h-label">${t('target_stage')}</span>
-          <select class="ro-h-select" id="ro-h-stage" style="width: 155px;">
-            ${STAGES_CONFIG.map(s => `<option value="${s.id}" ${config.targetStage === s.id ? 'selected' : ''}>${config.lang === 'en' ? (s.en || s.name) : s.name}</option>`).join('')}
-          </select>
+        <!-- 🗺️ 出發關卡、周目與難度整合配置入口 -->
+        <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 10px; margin: 4px 0 6px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+            <span style="font-size: 11px; font-weight: 700; color: #94a3b8; display: flex; align-items: center; gap: 4px;">
+              ${t('stage_summary_label')}
+            </span>
+            <button type="button" id="ro-h-open-diff-btn" class="ro-h-btn-secondary" style="padding: 3px 8px; font-size: 11px; background: rgba(14, 165, 233, 0.2); border: 1px solid rgba(14, 165, 233, 0.4); color: #38bdf8; font-weight: 600; border-radius: 5px; cursor: pointer;">
+              ⚙️ ${config.lang === 'en' ? 'Config' : '配置'}
+            </button>
+          </div>
+          <!-- TextView 唯讀即時展示摘要框 -->
+          <div id="ro-h-stage-summary-text" style="background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 6px; padding: 7px 10px; font-size: 11px; font-weight: 600; color: #38bdf8; line-height: 1.4; word-break: break-all; text-align: center; cursor: pointer;" title="${config.lang === 'en' ? 'Click to configure stage, lap, level-up mode & difficulty' : '點擊即可開啟關卡、周目、升級與難度配置彈窗'}">
+            ${getStageDifficultySummary()}
+          </div>
         </div>
-
-        <div class="ro-h-row">
-          <span class="ro-h-label">${t('levelup_mode')}</span>
-          <select class="ro-h-select" id="ro-h-levelup-mode" style="width: 155px;">
-            <option value="instant" ${config.levelUpMode === 'instant' ? 'selected' : ''}>${t('levelup_instant')}</option>
-            <option value="accumulate" ${config.levelUpMode === 'accumulate' ? 'selected' : ''}>${t('levelup_accumulate')}</option>
-          </select>
-        </div>
-
-        <div class="ro-h-row" id="ro-h-bank-auto-row" style="display: ${config.levelUpMode === 'accumulate' ? 'flex' : 'none'}; padding-left: 14px;">
-          <span class="ro-h-label" style="font-size: 11px; color: #94a3b8;">${t('auto_open_bank')}</span>
-          <label class="ro-h-switch">
-            <input type="checkbox" id="ro-h-bank-auto" ${config.autoOpenBank ? 'checked' : ''}>
-            <span class="ro-h-slider"></span>
-          </label>
-        </div>
-
-        <div class="ro-h-row" id="ro-h-bank-trigger-row" style="display: ${config.levelUpMode === 'accumulate' && config.autoOpenBank ? 'flex' : 'none'}; padding-left: 14px;">
-          <span class="ro-h-label" style="font-size: 11px; color: #94a3b8;">${t('bank_trigger_mode')}</span>
-          <select id="ro-h-bank-trigger-mode" class="ro-h-select" style="font-size: 11px; max-width: 140px; padding: 2px 6px;">
-            <option value="immediate" ${config.bankTriggerMode === 'immediate' ? 'selected' : ''}>⚡ ${t('bank_mode_immediate')}</option>
-            <option value="interval_30" ${config.bankTriggerMode === 'interval_30' ? 'selected' : ''}>⏱️ ${t('bank_mode_interval_30')}</option>
-            <option value="interval_60" ${config.bankTriggerMode === 'interval_60' ? 'selected' : ''}>⏱️ ${t('bank_mode_interval_60')}</option>
-          </select>
-        </div>
-
-        <button type="button" id="ro-h-open-diff-btn" class="ro-h-btn-secondary" style="width: 100%; justify-content: center; background: rgba(14, 165, 233, 0.15); border: 1px solid rgba(14, 165, 233, 0.35); color: #38bdf8; font-weight: 600; padding: 7px 10px; border-radius: 7px; cursor: pointer;">
-          ${t('open_diff_modal')}
-        </button>
 
         ${IS_HANS_SERVER ? '' : `
         <div class="ro-h-row">
@@ -9547,52 +9885,14 @@ function openItemsModal() {
         openDifficultyModal();
       };
     }
-
-    jobSel.onchange = () => {
-      config.selectedJob = jobSel.value;
-      saveConfig();
-      renderJobSkills();
-    };
-
-    stageSel.onchange = () => {
-      config.targetStage = stageSel.value;
-      if (config.targetStage === 'louyang') {
-        config.autoFestival = !IS_HANS_SERVER;
-        if (festivalCb) festivalCb.checked = config.autoFestival;
-      } else {
-        config.autoFestival = false;
-        if (festivalCb) festivalCb.checked = false;
-      }
-      saveConfig();
-    };
-
-    const levelUpSel = document.getElementById('ro-h-levelup-mode');
-    const bankAutoRow = document.getElementById('ro-h-bank-auto-row');
-    const bankAutoCb = document.getElementById('ro-h-bank-auto');
-
-    const bankTriggerRow = document.getElementById('ro-h-bank-trigger-row');
-    const bankTriggerSel = document.getElementById('ro-h-bank-trigger-mode');
-
-    levelUpSel.onchange = () => {
-      config.levelUpMode = levelUpSel.value;
-      const isAcc = config.levelUpMode === 'accumulate';
-      if (bankAutoRow) bankAutoRow.style.display = isAcc ? 'flex' : 'none';
-      if (bankTriggerRow) bankTriggerRow.style.display = (isAcc && config.autoOpenBank) ? 'flex' : 'none';
-      saveConfig();
-    };
-
-    bankAutoCb.onchange = () => {
-      config.autoOpenBank = bankAutoCb.checked;
-      if (bankTriggerRow) bankTriggerRow.style.display = (config.levelUpMode === 'accumulate' && config.autoOpenBank) ? 'flex' : 'none';
-      saveConfig();
-    };
-
-    if (bankTriggerSel) {
-      bankTriggerSel.onchange = () => {
-        config.bankTriggerMode = bankTriggerSel.value;
-        saveConfig();
+    const summaryTv = document.getElementById('ro-h-stage-summary-text');
+    if (summaryTv) {
+      summaryTv.onclick = () => {
+        openDifficultyModal();
       };
     }
+    // 關卡、周目、升級方式與開箱排程已統一移至彈窗管理，即時更新摘要卡片
+    updateStageSummaryTextView();
 
     if (festivalCb) {
       festivalCb.onchange = () => {
